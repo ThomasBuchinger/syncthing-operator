@@ -1,0 +1,53 @@
+
+---
+apiVersion: rbac.authorization.k8s.io/v1
+kind: ClusterRole
+metadata:
+  creationTimestamp: null
+  name: manager-role
+rules:
+- apiGroups:
+  - apps
+  resources:
+  - deployments
+  verbs:
+  - create
+  - delete
+  - get
+  - list
+  - patch
+  - update
+  - watch
+- apiGroups:
+  - ""
+  resources:
+  - pods
+  verbs:
+  - get
+  - list
+- apiGroups:
+  - syncthing.bus.sh
+  resources:
+  - instances
+  verbs:
+  - create
+  - delete
+  - get
+  - list
+  - patch
+  - update
+  - watch
+- apiGroups:
+  - syncthing.bus.sh
+  resources:
+  - instances/finalizers
+  verbs:
+  - update
+- apiGroups:
+  - syncthing.bus.sh
+  resources:
+  - instances/status
+  verbs:
+  - get
+  - patch
+  - update

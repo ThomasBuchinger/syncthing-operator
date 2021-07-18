@@ -1,0 +1,19 @@
+domain: bus.sh
+layout:
+- go.kubebuilder.io/v3
+plugins:
+  manifests.sdk.operatorframework.io/v2: {}
+  scorecard.sdk.operatorframework.io/v2: {}
+projectName: syncthing-operator
+repo: github.com/thomasbuchinger/syncthing-operator
+resources:
+- api:
+    crdVersion: v1
+    namespaced: true
+  controller: true
+  domain: bus.sh
+  group: syncthing
+  kind: Instance
+  path: github.com/thomasbuchinger/syncthing-operator/api/v1alpha1
+  version: v1alpha1
+version: "3"
