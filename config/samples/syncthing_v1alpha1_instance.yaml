@@ -1,13 +1,20 @@
-apiVersion: syncthing.bus.sh/v1alpha1
+apiVersion: syncthing.buc.sh/v1alpha1
 kind: Instance
 metadata:
   name: example-syncthing
 spec:
-  auto_update: true
   tag: latest
+  config_volume:
+    hostPath:
+      path: /tmp/syncthing-config
+    name: config-root
+  data_volumes:
+    - hostPath:
+        path: /tmp/syncthing-data
+      name: data-root
 
   apikey: "qwertyuiop"
-  tls_key: >
+  tls_key: |
     -----BEGIN RSA PRIVATE KEY-----
     MIIEpQIBAAKCAQEA4tNbZbNfjr7jHH2UTCymZn4DPmzqOZSpgimH90FDU4q6kVOn
     8OM++dmtYuSPPul8Iggfe7snQBauGtn1FnIJvpNE131cdNprDGd0L5KbIVKuSccS
@@ -35,30 +42,24 @@ spec:
     Ea4MQ20/6vXeljwceAeo/lXlEUh16XDtrlCfnJMmrx6wxNU4zrIcss/Ghm4w5QOU
     KmDuHkWQ6o+9FdMOcohrUVJsmUgKQNsXp9AKgvSRuO//Pv4fPT1YmCM=
     -----END RSA PRIVATE KEY-----
-  tls_crt: >
+  tls_crt: |
     -----BEGIN CERTIFICATE-----
-    MIIDRzCCAi8CFCyKIEBhaXy3flth2rNgdyB9jJjqMA0GCSqGSIb3DQEBCwUAMF8x
-    CzAJBgNVBAYTAkFUMRUwEwYDVQQHDAxEZWZhdWx0IENpdHkxHDAaBgNVBAoME0Rl
-    ZmF1bHQgQ29tcGFueSBMdGQxGzAZBgNVBAMMEnN5bmN0aGluZy1pbnN0YW5jZTAg
-    Fw0yMTA3MTYxNDA1MThaGA8yMTIxMDcxNjE0MDUxOFowXzELMAkGA1UEBhMCQVQx
-    FTATBgNVBAcMDERlZmF1bHQgQ2l0eTEcMBoGA1UECgwTRGVmYXVsdCBDb21wYW55
-    IEx0ZDEbMBkGA1UEAwwSc3luY3RoaW5nLWluc3RhbmNlMIIBIjANBgkqhkiG9w0B
-    AQEFAAOCAQ8AMIIBCgKCAQEA4tNbZbNfjr7jHH2UTCymZn4DPmzqOZSpgimH90FD
-    U4q6kVOn8OM++dmtYuSPPul8Iggfe7snQBauGtn1FnIJvpNE131cdNprDGd0L5Kb
-    IVKuSccSefksVKqIC3MDAvhTvPOhexaygMylhIIkt1esrb3ErAAx66V8DVezghry
-    3pArBjRKXibCW3srH6CI3M6gqZBdlN+SO4gW+2mXQ4HOPRYLKxOAQ2BeANs7n2Oe
-    CJQTVQcXLiQVUlLnUeXBC3KvE+fGeE2az82jFI1/Uy+y88UC9w9dWkGf2E550Gyp
-    b+NFmFxA6j3477hUO9atkghT6rx8d1M984hIdrp7uL3A+wIDAQABMA0GCSqGSIb3
-    DQEBCwUAA4IBAQByPLqfATHV+4j5pO4QiVr7aYdGEGZxm3zIRHEkBRfxIhQlFpTL
-    GZx6OGx16OxwqjK8n0SNn2Zo5FdP5UpY5bACwQkLWBZq6bWTke7VKUqfw34UWbaz
-    VF7Ur90TNETnp34VatJS/YoUgUNIlxeeVrm1gIXEqIp0WBt5Yl8IAMrvhGkTOBsM
-    L+i8qLyTdzyhIR4KpKYIdkhm5Vbn2fbog15UduueaKSewqTkDKAmEBVwYFOhHozW
-    Qi/GMbGG1346Iqy8odCF3TywTs4G/aNPuFLGMM9vZoAWecd6ACB0Wn9v+zmEMjeI
-    z5u+yMyMCT/iPoDXf0Y12hu3NuHxSWKDTbss
+    MIIDPTCCAiUCFFxXBBQtMm8zGSxniUXbGP4O77VkMA0GCSqGSIb3DQEBCwUAMFox
+    CzAJBgNVBAYTAkFUMQ8wDQYDVQQHDAZWaWVubmExEjAQBgNVBAoMCXN5bmN0aGlu
+    ZzESMBAGA1UECwwJc3luY3RoaW5nMRIwEAYDVQQDDAlzeW5jdGhpbmcwIBcNMjEw
+    NzE5MTQzODAzWhgPMjEyMTA3MTkxNDM4MDNaMFoxCzAJBgNVBAYTAkFUMQ8wDQYD
+    VQQHDAZWaWVubmExEjAQBgNVBAoMCXN5bmN0aGluZzESMBAGA1UECwwJc3luY3Ro
+    aW5nMRIwEAYDVQQDDAlzeW5jdGhpbmcwggEiMA0GCSqGSIb3DQEBAQUAA4IBDwAw
+    ggEKAoIBAQDi01tls1+OvuMcfZRMLKZmfgM+bOo5lKmCKYf3QUNTirqRU6fw4z75
+    2a1i5I8+6XwiCB97uydAFq4a2fUWcgm+k0TXfVx02msMZ3QvkpshUq5JxxJ5+SxU
+    qogLcwMC+FO886F7FrKAzKWEgiS3V6ytvcSsADHrpXwNV7OCGvLekCsGNEpeJsJb
+    eysfoIjczqCpkF2U35I7iBb7aZdDgc49FgsrE4BDYF4A2zufY54IlBNVBxcuJBVS
+    UudR5cELcq8T58Z4TZrPzaMUjX9TL7LzxQL3D11aQZ/YTnnQbKlv40WYXEDqPfjv
+    uFQ71q2SCFPqvHx3Uz3ziEh2unu4vcD7AgMBAAEwDQYJKoZIhvcNAQELBQADggEB
+    ADb9VEGQ1zq24QXjnokD5YkncsR/RvfHMJjmGhgCtG93B6oSN7QY0gXzRoA62bKJ
+    +BuWRH+XavDAVw24w56E5uvKX8RhuYZUQJS+qGcPJ3L/VxpjD+kGIMLhFD87O3PY
+    mLSVmwM93PUWMDtFvUSW6hSlxZtJpttOvGjOnmKC/8lR0cwrzcPiiaSHgG2o49zd
+    3ydeZyBoNGFqXSgA4q/LIzLbH2RZ+2T57xkaA4PFeJLgwQy1GEeDmg6F+2siyUjx
+    C+6DbKKnudNvd78C0ei9IJpN+jr2ytDNwfwLfgqvdODNXTwizsYsyQvmxABy9GT4
+    ieztJ2Z7hWwkk42GoYs0Dhs=
     -----END CERTIFICATE-----
-
-
-
-
-
-

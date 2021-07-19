@@ -1,4 +1,4 @@
-domain: bus.sh
+domain: buc.sh
 layout:
 - go.kubebuilder.io/v3
 plugins:
@@ -11,7 +11,7 @@ resources:
     crdVersion: v1
     namespaced: true
   controller: true
-  domain: bus.sh
+  domain: buc.sh
   group: syncthing
   kind: Instance
   path: github.com/thomasbuchinger/syncthing-operator/api/v1alpha1

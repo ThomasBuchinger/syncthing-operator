@@ -26,7 +26,7 @@ rules:
   - get
   - list
 - apiGroups:
-  - syncthing.bus.sh
+  - syncthing.buc.sh
   resources:
   - instances
   verbs:
@@ -38,13 +38,13 @@ rules:
   - update
   - watch
 - apiGroups:
-  - syncthing.bus.sh
+  - syncthing.buc.sh
   resources:
   - instances/finalizers
   verbs:
   - update
 - apiGroups:
-  - syncthing.bus.sh
+  - syncthing.buc.sh
   resources:
   - instances/status
   verbs:

@@ -22,19 +22,25 @@ import (
 )
 
 type InstanceSpec struct {
-	AutoUpdate bool   `json:"auto_update"`
-	ImageName  string `json:"image,omitempty"`
-	Tag        string `json:"tag,omitempty"`
+	// AutoUpdate bool   `json:"auto_update"`
+	ImageName string `json:"image,omitempty"`
+	Tag       string `json:"tag,omitempty"`
+	SyncPort  int    `json:"sync_port,omitempty"`
 
-	ApiKey             string                 `json:"apikey"`
-	TlsCrt             string                 `json:"tls_crt,omitempty"`
-	TlsKey             string                 `json:"tls_key,omitempty"`
-	SyncthingTlsConfig corev1.SecretReference `json:"syncthing_tls,omitempty"`
+	ApiKey string `json:"apikey"`
+	TlsCrt string `json:"tls_crt,omitempty"`
+	TlsKey string `json:"tls_key,omitempty"`
+	// SyncthingTlsConfig corev1.SecretReference `json:"syncthing_tls,omitempty"`
 
 	AllowUsageReport bool                   `json:"allow_usage_report,omitempty"`
 	HttpsTlsConfig   corev1.SecretReference `json:"https_tls,omitempty"`
 
-	DataVolumes []corev1.Volume `json:"data_volumes,omitempty"`
+	ConfigVolume corev1.Volume   `json:"config_volume,omitempty"`
+	DataVolumes  []corev1.Volume `json:"data_volumes,omitempty"`
+
+	DataPath      string `json:"-"`
+	ConfigPath    string `json:"-"`
+	ContainerName string `json:"-"`
 }
 
 // InstanceStatus defines the observed state of Instance

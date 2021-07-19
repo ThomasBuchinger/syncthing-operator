@@ -39,9 +39,9 @@ type InstanceReconciler struct {
 	Scheme *runtime.Scheme
 }
 
-//+kubebuilder:rbac:groups=syncthing.bus.sh,resources=instances,verbs=get;list;watch;create;update;patch;delete
-//+kubebuilder:rbac:groups=syncthing.bus.sh,resources=instances/status,verbs=get;update;patch
-//+kubebuilder:rbac:groups=syncthing.bus.sh,resources=instances/finalizers,verbs=update
+//+kubebuilder:rbac:groups=syncthing.buc.sh,resources=instances,verbs=get;list;watch;create;update;patch;delete
+//+kubebuilder:rbac:groups=syncthing.buc.sh,resources=instances/status,verbs=get;update;patch
+//+kubebuilder:rbac:groups=syncthing.buc.sh,resources=instances/finalizers,verbs=update
 //+kubebuilder:rbac:groups=apps,resources=deployments,verbs=get;list;watch;create;update;patch;delete
 //+kubebuilder:rbac:groups=core,resources=pods,verbs=get;list;
 
@@ -77,7 +77,7 @@ func (r *InstanceReconciler) Reconcile(ctx context.Context, req ctrl.Request) (c
 	// =====================================
 
 	// === Look for the referenced TLS Secret ===
-	secret := tlsSecretForSyncthing(syncthing_cr)
+	secret := generateTlsSecret(syncthing_cr)
 	ctrl.SetControllerReference(syncthing_cr, secret, r.Scheme)
 	obj, create_return, err := GetOrCreate(r, ctx, req, secret)
 	if create_return == Created {
@@ -92,7 +92,7 @@ func (r *InstanceReconciler) Reconcile(ctx context.Context, req ctrl.Request) (c
 	found_secret := obj.(*corev1.Secret)
 
 	// === Ensure Deployment exists ===
-	deployment := deploymentForSyncthing(syncthing_cr)
+	deployment := generateDeployment(syncthing_cr)
 	ctrl.SetControllerReference(syncthing_cr, deployment, r.Scheme)
 	obj, create_return, err = GetOrCreate(r, ctx, req, deployment)
 	if create_return == Created {
@@ -106,10 +106,27 @@ func (r *InstanceReconciler) Reconcile(ctx context.Context, req ctrl.Request) (c
 	logger.Info("Using Deployment: " + obj.GetName())
 	found_deployment := obj.(*appsv1.Deployment)
 
+	// === Ensure Service exists ===
+	service := generateService(syncthing_cr)
+	ctrl.SetControllerReference(syncthing_cr, service, r.Scheme)
+	obj, create_return, err = GetOrCreate(r, ctx, req, service)
+	if create_return == Created {
+		logger.Info("Created Service: " + obj.GetName())
+		return ctrl.Result{Requeue: true}, nil
+	}
+	if create_return == CreateError || create_return == GetError {
+		logger.Error(err, "Failed to create Service")
+		return ctrl.Result{}, nil
+	}
+	logger.Info("Using Service: " + obj.GetName())
+	found_service := obj.(*corev1.Service)
+	logger.Info("Using ClusterIP: " + found_service.Spec.ClusterIP)
+
 	// =============================================
 	// === Apply configuration to the API object ===
 	// =============================================
-	container_index := getContainerIndexByName(found_deployment.Spec.Template.Spec.Containers, "syncthing")
+	changed := false
+	container_index := getContainerIndexByName(found_deployment.Spec.Template.Spec.Containers, syncthing_cr.Spec.ContainerName)
 	if container_index == -1 {
 		logger.Error(nil, "Unable to find syncthing Container in Deployment. Replacing Containers section...")
 		found_deployment.Spec.Template.Spec.Containers = deployment.Spec.Template.Spec.Containers
@@ -121,31 +138,45 @@ func (r *InstanceReconciler) Reconcile(ctx context.Context, req ctrl.Request) (c
 	if current_image != container_image {
 		logger.Info("Updating Image from " + current_image + " to " + container_image)
 		found_deployment.Spec.Template.Spec.Containers[container_index].Image = container_image
+		changed = true
+	}
+
+	// === Create Volume from TlsSecret ===
+	if getVolumeIndexByName(found_deployment.Spec.Template.Spec.Volumes, "tls-config") == -1 ||
+		getVolumeMountIndexByName(found_deployment.Spec.Template.Spec.Containers[container_index].VolumeMounts, "tls-config") == -1 {
+		logger.Info("Adding TLS configuration to deployment...")
+		found_deployment = generateTlsVolumeAndMount(syncthing_cr, found_secret, found_deployment)
+		logger.Info("tls volume mounts", "mount", found_deployment.Spec.Template.Spec.Containers[container_index].VolumeMounts)
+	}
+
+	// === Ensure all Volumes are present ===
+	persistentVolumes := []corev1.Volume{syncthing_cr.Spec.ConfigVolume}
+	persistentVolumes = append(persistentVolumes, syncthing_cr.Spec.DataVolumes...)
+	mountConfigs := generateVolumeMountConfigs(syncthing_cr, persistentVolumes)
+	for _, volume := range persistentVolumes {
+		if -1 == getVolumeIndexByName(found_deployment.Spec.Template.Spec.Volumes, volume.Name) {
+			logger.Info("Adding Volume: " + volume.Name)
+			found_deployment.Spec.Template.Spec.Volumes = append(found_deployment.Spec.Template.Spec.Volumes, volume)
+			if getVolumeMountIndexByName(found_deployment.Spec.Template.Spec.Containers[container_index].VolumeMounts, volume.Name) == -1 {
+				found_deployment.Spec.Template.Spec.Containers[container_index].VolumeMounts = append(found_deployment.Spec.Template.Spec.Containers[container_index].VolumeMounts, mountConfigs[volume.Name])
+			}
+			if getVolumeMountIndexByName(found_deployment.Spec.Template.Spec.InitContainers[0].VolumeMounts, volume.Name) == -1 {
+				found_deployment.Spec.Template.Spec.InitContainers[0].VolumeMounts = append(found_deployment.Spec.Template.Spec.InitContainers[0].VolumeMounts, mountConfigs[volume.Name])
+			}
+			changed = true
+		}
+	}
+
+	// === Update Deployment
+
+	if changed {
+		logger.Info("Updating Deployment...", "deployment", found_deployment)
 		err = r.Update(ctx, found_deployment)
 		if err != nil {
 			logger.Error(err, "Failed to update Deployment: "+found_deployment.Name)
 			return ctrl.Result{}, err
 		}
-
 		return ctrl.Result{Requeue: true}, nil
-	}
-
-	// Ensure Tls Certificate is mounted
-	tls_volume_name := "tls-config"
-	tlsVolumeIndex := getTlsVolumeIndexByName(found_deployment.Spec.Template.Spec.Volumes, tls_volume_name)
-	if tlsVolumeIndex == -1 {
-		logger.Info("Adding TLS Config to Deployment")
-		found_deployment.Spec.Template.Spec.Volumes = append(
-			found_deployment.Spec.Template.Spec.Volumes,
-			corev1.Volume{
-				Name: tls_volume_name,
-				VolumeSource: corev1.VolumeSource{
-					Secret: &corev1.SecretVolumeSource{
-						SecretName: found_secret.Name,
-					},
-				},
-			},
-		)
 	}
 
 	// // Update the Memcached status with the pod names
