@@ -16,4 +16,22 @@ resources:
   kind: Instance
   path: github.com/thomasbuchinger/syncthing-operator/api/v1alpha1
   version: v1alpha1
+- api:
+    crdVersion: v1
+    namespaced: true
+  controller: true
+  domain: buc.sh
+  group: syncthing
+  kind: Device
+  path: github.com/thomasbuchinger/syncthing-operator/api/v1alpha1
+  version: v1alpha1
+- api:
+    crdVersion: v1
+    namespaced: true
+  controller: true
+  domain: buc.sh
+  group: syncthing
+  kind: Folder
+  path: github.com/thomasbuchinger/syncthing-operator/api/v1alpha1
+  version: v1alpha1
 version: "3"

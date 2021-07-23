@@ -1,0 +1,7 @@
+apiVersion: syncthing.buc.sh/v1alpha1
+kind: Folder
+metadata:
+  name: folder-sample
+spec:
+  # Add fields here
+  foo: bar

@@ -13,6 +13,7 @@ func fillDefaultValues(i *syncthingv1alpha1.Instance) error {
 	i.Spec.DataPath = "/var/syncthing/"
 	i.Spec.ConfigPath = "/etc/syncthing/"
 	i.Spec.ContainerName = "syncthing"
+	i.Spec.TlsConfigName = "tls-config"
 	if i.Spec.ImageName == "" {
 		i.Spec.ImageName = "docker.io/syncthing/syncthing"
 	}
@@ -77,42 +78,37 @@ func getVolumeMountIndexByName(list []corev1.VolumeMount, name string) int {
 }
 
 func generateTlsVolumeAndMount(syncthing_cr *syncthingv1alpha1.Instance, secret *corev1.Secret, deployment *appsv1.Deployment) *appsv1.Deployment {
+	// var permissions int32 = 0777
 	tlsVolume := corev1.Volume{
-		Name: "tls-config",
+		Name: syncthing_cr.Spec.TlsConfigName,
 		VolumeSource: corev1.VolumeSource{
 			Secret: &corev1.SecretVolumeSource{
 				SecretName: secret.Name,
-				// Items: []corev1.KeyToPath{{
-				// 	Key: "tls.crt", Path: "cert.pem",
-				// }, {
-				// 	Key: "tls.key", Path: "key.pem",
-				// }},
 			},
 		},
 	}
 	keyMount := corev1.VolumeMount{
-		Name:      "tls-config",
-		MountPath: "/tmp/syncthing/key.pem",
+		Name:      tlsVolume.Name,
+		MountPath: syncthing_cr.Spec.ConfigPath + "key.pem",
 		SubPath:   "tls.key",
 	}
 	certMount := corev1.VolumeMount{
-		Name:      "tls-config",
-		MountPath: "/tmp/syncthing/cert.pem",
+		Name:      tlsVolume.Name,
+		MountPath: syncthing_cr.Spec.ConfigPath + "cert.pem",
 		SubPath:   "tls.crt",
 	}
 
 	deployment.Spec.Template.Spec.Volumes = append(deployment.Spec.Template.Spec.Volumes, tlsVolume)
-	for index, _ := range deployment.Spec.Template.Spec.Containers {
+	for index := range deployment.Spec.Template.Spec.Containers {
 		if getVolumeMountIndexByName(deployment.Spec.Template.Spec.Containers[index].VolumeMounts, tlsVolume.Name) == -1 {
 			deployment.Spec.Template.Spec.Containers[index].VolumeMounts = append(deployment.Spec.Template.Spec.Containers[index].VolumeMounts, keyMount, certMount)
 		}
 	}
-	for index, _ := range deployment.Spec.Template.Spec.InitContainers {
+	for index := range deployment.Spec.Template.Spec.InitContainers {
 		if getVolumeMountIndexByName(deployment.Spec.Template.Spec.InitContainers[index].VolumeMounts, tlsVolume.Name) == -1 {
 			deployment.Spec.Template.Spec.InitContainers[index].VolumeMounts = append(deployment.Spec.Template.Spec.InitContainers[index].VolumeMounts, keyMount, certMount)
 		}
 	}
-
 	return deployment
 }
 
@@ -139,10 +135,16 @@ func generateVolumeMountConfigs(syncthing_cr *syncthingv1alpha1.Instance, volume
 
 // TLS config for Syncthing
 func generateTlsSecret(syncthing_cr *syncthingv1alpha1.Instance) *corev1.Secret {
+	secretLabels := commonSyncthingLabels(syncthing_cr.Name)
+	secretLabels["api.syncthing.buc.sh"] = "plain"
+	secretLabels["cert.syncthing.buc.sh"] = "pem"
+	secretLabels["key.syncthing.buc.sh"] = "pem"
+
 	secret := &corev1.Secret{
 		ObjectMeta: metav1.ObjectMeta{
 			Name:      syncthing_cr.Name + "-id",
 			Namespace: syncthing_cr.Namespace,
+			Labels:    secretLabels,
 		},
 		Type: corev1.SecretTypeTLS,
 		Data: map[string][]byte{
@@ -152,12 +154,10 @@ func generateTlsSecret(syncthing_cr *syncthingv1alpha1.Instance) *corev1.Secret 
 		},
 	}
 
-	// Set Memcached instance as the owner and controller
-	// ctrl.SetControllerReference(syncthing_cr, secret, r.Scheme)
 	return secret
 }
 
-// deploymentForMemcached returns a memcached Deployment object
+// Base Deployment Object
 func generateDeployment(syncthing_cr *syncthingv1alpha1.Instance) *appsv1.Deployment {
 	labels := commonSyncthingLabels(syncthing_cr.Name)
 	image := syncthing_cr.Spec.ImageName
@@ -203,16 +203,17 @@ func generateDeployment(syncthing_cr *syncthingv1alpha1.Instance) *appsv1.Deploy
 								Name:          "sync",
 							},
 						},
-					}},
-					InitContainers: []corev1.Container{{
-						Image:           image + ":" + tag,
-						ImagePullPolicy: corev1.PullIfNotPresent,
-						Name:            syncthing_cr.Spec.ContainerName + "-cert-copy",
-						Command: []string{
-							"cp",
-							"/tmp/syncthing/cert.pem",
-							"/tmp/syncthing/key.pem",
-							"/etc/syncthing/",
+						LivenessProbe: &corev1.Probe{
+							Handler: corev1.Handler{
+								HTTPGet: &corev1.HTTPGetAction{
+									Path: "/rest/system/ping",
+									Port: intstr.FromString("http"),
+									HTTPHeaders: []corev1.HTTPHeader{{
+										Name:  "X-API-Key",
+										Value: syncthing_cr.Spec.ApiKey,
+									}},
+								},
+							},
 						},
 					}},
 				},
@@ -221,10 +222,29 @@ func generateDeployment(syncthing_cr *syncthingv1alpha1.Instance) *appsv1.Deploy
 	}
 }
 
-func generateService(syncthing_cr *syncthingv1alpha1.Instance) *corev1.Service {
+func generateClusterService(syncthing_cr *syncthingv1alpha1.Instance) *corev1.Service {
 	return &corev1.Service{
 		ObjectMeta: metav1.ObjectMeta{
-			Name:      syncthing_cr.Name,
+			Name:      syncthing_cr.Name + "-web",
+			Namespace: syncthing_cr.Namespace,
+		},
+		Spec: corev1.ServiceSpec{
+			Type:     corev1.ServiceTypeClusterIP,
+			Selector: commonSyncthingLabels(syncthing_cr.Name),
+			Ports: []corev1.ServicePort{{
+				Name:       "http",
+				Port:       8384,
+				TargetPort: intstr.FromString("http"),
+				Protocol:   corev1.ProtocolTCP,
+			}},
+		},
+	}
+}
+
+func generateNodeportService(syncthing_cr *syncthingv1alpha1.Instance) *corev1.Service {
+	return &corev1.Service{
+		ObjectMeta: metav1.ObjectMeta{
+			Name:      syncthing_cr.Name + "-nodeport",
 			Namespace: syncthing_cr.Namespace,
 		},
 		Spec: corev1.ServiceSpec{

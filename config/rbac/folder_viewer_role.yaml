@@ -1,0 +1,20 @@
+# permissions for end users to view folders.
+apiVersion: rbac.authorization.k8s.io/v1
+kind: ClusterRole
+metadata:
+  name: folder-viewer-role
+rules:
+- apiGroups:
+  - syncthing.buc.sh
+  resources:
+  - folders
+  verbs:
+  - get
+  - list
+  - watch
+- apiGroups:
+  - syncthing.buc.sh
+  resources:
+  - folders/status
+  verbs:
+  - get

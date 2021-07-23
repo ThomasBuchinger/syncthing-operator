@@ -41,6 +41,7 @@ type InstanceSpec struct {
 	DataPath      string `json:"-"`
 	ConfigPath    string `json:"-"`
 	ContainerName string `json:"-"`
+	TlsConfigName string `json:"-"`
 }
 
 // InstanceStatus defines the observed state of Instance

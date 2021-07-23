@@ -28,6 +28,32 @@ rules:
 - apiGroups:
   - syncthing.buc.sh
   resources:
+  - devices
+  verbs:
+  - create
+  - delete
+  - get
+  - list
+  - patch
+  - update
+  - watch
+- apiGroups:
+  - syncthing.buc.sh
+  resources:
+  - devices/finalizers
+  verbs:
+  - update
+- apiGroups:
+  - syncthing.buc.sh
+  resources:
+  - devices/status
+  verbs:
+  - get
+  - patch
+  - update
+- apiGroups:
+  - syncthing.buc.sh
+  resources:
   - instances
   verbs:
   - create

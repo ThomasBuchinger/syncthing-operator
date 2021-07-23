@@ -18,6 +18,7 @@ package controllers
 
 import (
 	"context"
+	"net/url"
 	"time"
 
 	"k8s.io/apimachinery/pkg/api/errors"
@@ -28,6 +29,7 @@ import (
 	"sigs.k8s.io/controller-runtime/pkg/log"
 
 	syncthingv1alpha1 "github.com/thomasbuchinger/syncthing-operator/api/v1alpha1"
+	syncthingclient "github.com/thomasbuchinger/syncthing-operator/pkg/syncthing-client"
 
 	appsv1 "k8s.io/api/apps/v1"
 	corev1 "k8s.io/api/core/v1"
@@ -36,7 +38,8 @@ import (
 // InstanceReconciler reconciles a Instance object
 type InstanceReconciler struct {
 	client.Client
-	Scheme *runtime.Scheme
+	stClient *syncthingclient.StClient
+	Scheme   *runtime.Scheme
 }
 
 //+kubebuilder:rbac:groups=syncthing.buc.sh,resources=instances,verbs=get;list;watch;create;update;patch;delete
@@ -55,68 +58,79 @@ type InstanceReconciler struct {
 // For more details, check Reconcile and its Result here:
 // - https://pkg.go.dev/sigs.k8s.io/controller-runtime@v0.8.3/pkg/reconcile
 func (r *InstanceReconciler) Reconcile(ctx context.Context, req ctrl.Request) (ctrl.Result, error) {
-	logger := log.Log.WithName(req.Namespace + "/" + req.Name)
+	logger := log.FromContext(ctx)
 	logger.Info("In Reconcile...")
 
 	// Get the CustomResource
-	syncthing_cr := &syncthingv1alpha1.Instance{}
-	err := r.Get(ctx, types.NamespacedName{Namespace: req.Namespace, Name: req.Name}, syncthing_cr)
+	instanceCr := &syncthingv1alpha1.Instance{}
+	err := r.Get(ctx, types.NamespacedName{Namespace: req.Namespace, Name: req.Name}, instanceCr)
 	if err != nil {
 		if errors.IsNotFound(err) {
-			logger.Info("Syncthing Resource not found. Must be deleted")
+			logger.Info("Syncthing Resource deleted.")
 			return ctrl.Result{}, nil
 
 		}
 		logger.Error(err, "Something went terrible wrong!")
 		return ctrl.Result{}, err
 	}
-	fillDefaultValues(syncthing_cr)
+	fillDefaultValues(instanceCr)
 
 	// =====================================
 	// === Create necessary API opbjects ===
 	// =====================================
 
 	// === Look for the referenced TLS Secret ===
-	secret := generateTlsSecret(syncthing_cr)
-	ctrl.SetControllerReference(syncthing_cr, secret, r.Scheme)
-	obj, create_return, err := GetOrCreate(r, ctx, req, secret)
-	if create_return == Created {
+	secret := generateTlsSecret(instanceCr)
+	ctrl.SetControllerReference(instanceCr, secret, r.Scheme)
+	obj, createReturn, err := GetOrCreate(r, ctx, req, secret)
+	if createReturn == Created {
 		logger.Info("Created Secret: " + obj.GetName())
 		return ctrl.Result{Requeue: true}, nil
 	}
-	if create_return == CreateError || create_return == GetError {
+	if createReturn == CreateError || createReturn == GetError {
 		logger.Error(err, "Failed to create Secret for TLS config")
-		return ctrl.Result{}, nil
+		return ctrl.Result{Requeue: true, RequeueAfter: 1 * time.Minute}, err
 	}
 	logger.Info("Using Secret: " + obj.GetName())
-	found_secret := obj.(*corev1.Secret)
+	foundSecret := obj.(*corev1.Secret)
 
 	// === Ensure Deployment exists ===
-	deployment := generateDeployment(syncthing_cr)
-	ctrl.SetControllerReference(syncthing_cr, deployment, r.Scheme)
-	obj, create_return, err = GetOrCreate(r, ctx, req, deployment)
-	if create_return == Created {
+	deployment := generateDeployment(instanceCr)
+	ctrl.SetControllerReference(instanceCr, deployment, r.Scheme)
+	obj, createReturn, err = GetOrCreate(r, ctx, req, deployment)
+	if createReturn == Created {
 		logger.Info("Created Deployment: " + obj.GetName())
 		return ctrl.Result{Requeue: true}, nil
 	}
-	if create_return == CreateError || create_return == GetError {
+	if createReturn == CreateError || createReturn == GetError {
 		logger.Error(err, "Failed to create Deployment")
-		return ctrl.Result{}, nil
+		return ctrl.Result{Requeue: true, RequeueAfter: 1 * time.Minute}, err
 	}
 	logger.Info("Using Deployment: " + obj.GetName())
-	found_deployment := obj.(*appsv1.Deployment)
+	foundDeployment := obj.(*appsv1.Deployment)
 
 	// === Ensure Service exists ===
-	service := generateService(syncthing_cr)
-	ctrl.SetControllerReference(syncthing_cr, service, r.Scheme)
-	obj, create_return, err = GetOrCreate(r, ctx, req, service)
-	if create_return == Created {
-		logger.Info("Created Service: " + obj.GetName())
+	nodeportService := generateNodeportService(instanceCr)
+	ctrl.SetControllerReference(instanceCr, nodeportService, r.Scheme)
+	obj, createReturn, err = GetOrCreate(r, ctx, req, nodeportService)
+	if createReturn == Created {
+		logger.Info("Created Nodeport Service: " + obj.GetName())
 		return ctrl.Result{Requeue: true}, nil
 	}
-	if create_return == CreateError || create_return == GetError {
-		logger.Error(err, "Failed to create Service")
-		return ctrl.Result{}, nil
+	if createReturn == CreateError || createReturn == GetError {
+		logger.Error(err, "Failed to create Nodeport Service")
+		return ctrl.Result{Requeue: true, RequeueAfter: 1 * time.Minute}, nil
+	}
+	clusterService := generateClusterService(instanceCr)
+	ctrl.SetControllerReference(instanceCr, clusterService, r.Scheme)
+	obj, createReturn, err = GetOrCreate(r, ctx, req, clusterService)
+	if createReturn == Created {
+		logger.Info("Created Cluster Service: " + obj.GetName())
+		return ctrl.Result{Requeue: true}, nil
+	}
+	if createReturn == CreateError || createReturn == GetError {
+		logger.Error(err, "Failed to create Cluster Service")
+		return ctrl.Result{Requeue: true, RequeueAfter: 1 * time.Minute}, nil
 	}
 	logger.Info("Using Service: " + obj.GetName())
 	found_service := obj.(*corev1.Service)
@@ -126,42 +140,39 @@ func (r *InstanceReconciler) Reconcile(ctx context.Context, req ctrl.Request) (c
 	// === Apply configuration to the API object ===
 	// =============================================
 	changed := false
-	container_index := getContainerIndexByName(found_deployment.Spec.Template.Spec.Containers, syncthing_cr.Spec.ContainerName)
+	container_index := getContainerIndexByName(foundDeployment.Spec.Template.Spec.Containers, instanceCr.Spec.ContainerName)
 	if container_index == -1 {
 		logger.Error(nil, "Unable to find syncthing Container in Deployment. Replacing Containers section...")
-		found_deployment.Spec.Template.Spec.Containers = deployment.Spec.Template.Spec.Containers
+		foundDeployment.Spec.Template.Spec.Containers = deployment.Spec.Template.Spec.Containers
 	}
 
 	// === Ensure the correct image is used ===
-	container_image := syncthing_cr.Spec.ImageName + ":" + syncthing_cr.Spec.Tag
-	current_image := found_deployment.Spec.Template.Spec.Containers[container_index].Image
+	container_image := instanceCr.Spec.ImageName + ":" + instanceCr.Spec.Tag
+	current_image := foundDeployment.Spec.Template.Spec.Containers[container_index].Image
 	if current_image != container_image {
 		logger.Info("Updating Image from " + current_image + " to " + container_image)
-		found_deployment.Spec.Template.Spec.Containers[container_index].Image = container_image
+		foundDeployment.Spec.Template.Spec.Containers[container_index].Image = container_image
 		changed = true
 	}
 
 	// === Create Volume from TlsSecret ===
-	if getVolumeIndexByName(found_deployment.Spec.Template.Spec.Volumes, "tls-config") == -1 ||
-		getVolumeMountIndexByName(found_deployment.Spec.Template.Spec.Containers[container_index].VolumeMounts, "tls-config") == -1 {
+	if getVolumeIndexByName(foundDeployment.Spec.Template.Spec.Volumes, instanceCr.Spec.TlsConfigName) == -1 ||
+		getVolumeMountIndexByName(foundDeployment.Spec.Template.Spec.Containers[container_index].VolumeMounts, instanceCr.Spec.TlsConfigName) == -1 {
 		logger.Info("Adding TLS configuration to deployment...")
-		found_deployment = generateTlsVolumeAndMount(syncthing_cr, found_secret, found_deployment)
-		logger.Info("tls volume mounts", "mount", found_deployment.Spec.Template.Spec.Containers[container_index].VolumeMounts)
+		foundDeployment = generateTlsVolumeAndMount(instanceCr, foundSecret, foundDeployment)
+		logger.Info("tls volume mounts", "mount", foundDeployment.Spec.Template.Spec.Containers[container_index].VolumeMounts)
 	}
 
 	// === Ensure all Volumes are present ===
-	persistentVolumes := []corev1.Volume{syncthing_cr.Spec.ConfigVolume}
-	persistentVolumes = append(persistentVolumes, syncthing_cr.Spec.DataVolumes...)
-	mountConfigs := generateVolumeMountConfigs(syncthing_cr, persistentVolumes)
+	persistentVolumes := []corev1.Volume{instanceCr.Spec.ConfigVolume}
+	persistentVolumes = append(persistentVolumes, instanceCr.Spec.DataVolumes...)
+	mountConfigs := generateVolumeMountConfigs(instanceCr, persistentVolumes)
 	for _, volume := range persistentVolumes {
-		if -1 == getVolumeIndexByName(found_deployment.Spec.Template.Spec.Volumes, volume.Name) {
+		if -1 == getVolumeIndexByName(foundDeployment.Spec.Template.Spec.Volumes, volume.Name) {
 			logger.Info("Adding Volume: " + volume.Name)
-			found_deployment.Spec.Template.Spec.Volumes = append(found_deployment.Spec.Template.Spec.Volumes, volume)
-			if getVolumeMountIndexByName(found_deployment.Spec.Template.Spec.Containers[container_index].VolumeMounts, volume.Name) == -1 {
-				found_deployment.Spec.Template.Spec.Containers[container_index].VolumeMounts = append(found_deployment.Spec.Template.Spec.Containers[container_index].VolumeMounts, mountConfigs[volume.Name])
-			}
-			if getVolumeMountIndexByName(found_deployment.Spec.Template.Spec.InitContainers[0].VolumeMounts, volume.Name) == -1 {
-				found_deployment.Spec.Template.Spec.InitContainers[0].VolumeMounts = append(found_deployment.Spec.Template.Spec.InitContainers[0].VolumeMounts, mountConfigs[volume.Name])
+			foundDeployment.Spec.Template.Spec.Volumes = append(foundDeployment.Spec.Template.Spec.Volumes, volume)
+			if getVolumeMountIndexByName(foundDeployment.Spec.Template.Spec.Containers[container_index].VolumeMounts, volume.Name) == -1 {
+				foundDeployment.Spec.Template.Spec.Containers[container_index].VolumeMounts = append(foundDeployment.Spec.Template.Spec.Containers[container_index].VolumeMounts, mountConfigs[volume.Name])
 			}
 			changed = true
 		}
@@ -170,14 +181,16 @@ func (r *InstanceReconciler) Reconcile(ctx context.Context, req ctrl.Request) (c
 	// === Update Deployment
 
 	if changed {
-		logger.Info("Updating Deployment...", "deployment", found_deployment)
-		err = r.Update(ctx, found_deployment)
+		logger.Info("Updating Deployment...", "deployment", foundDeployment)
+		err = r.Update(ctx, foundDeployment)
 		if err != nil {
-			logger.Error(err, "Failed to update Deployment: "+found_deployment.Name)
-			return ctrl.Result{}, err
+			logger.Error(err, "Failed to update Deployment: "+foundDeployment.Name)
+			return ctrl.Result{Requeue: true, RequeueAfter: 1 * time.Minute}, err
 		}
 		return ctrl.Result{Requeue: true}, nil
 	}
+
+	// TODO: Update InstanceCr Status correctly
 
 	// // Update the Memcached status with the pod names
 	// // List the pods for this memcached's deployment
@@ -201,9 +214,56 @@ func (r *InstanceReconciler) Reconcile(ctx context.Context, req ctrl.Request) (c
 	// 		return ctrl.Result{}, err
 	// 	}
 	// }
-	logger.Info("Syncthing successfully deployed!")
-	return ctrl.Result{Requeue: true, RequeueAfter: 30 * time.Second}, nil
-	// return ctrl.Result{}, nil
+	logger.Info("Syncthing Container deployed!")
+	return r.ReconcileApplication(ctx, req, instanceCr)
+}
+
+func (r *InstanceReconciler) ReconcileApplication(ctx context.Context, req ctrl.Request, syncthing_cr *syncthingv1alpha1.Instance) (ctrl.Result, error) {
+	logger := log.FromContext(ctx)
+	r.stClient = syncthingclient.SetupSyncthingClient(syncthing_cr.Spec.ApiKey)
+	// TODO: Change to actual URL
+	r.stClient.BaseUrl = url.URL{Scheme: "http", Host: "10.0.0.21:32001"}
+
+	for i := 0; i < 10; i++ {
+		alive, msg := r.stClient.Ping()
+		if !alive {
+			logger.Info("Syncthing instance not reachable (yet?): " + msg)
+			return ctrl.Result{Requeue: true, RequeueAfter: 10 * time.Second}, nil
+		}
+	}
+
+	// === Fetch current Syncthing config ===
+	config, err := r.stClient.GetConfig()
+	if err != nil {
+		logger.Error(err, "cannot fetch config")
+		return ctrl.Result{Requeue: true, RequeueAfter: 1 * time.Minute}, err
+	}
+
+	// === Disable UsegeStatistics to make the popup go away ===
+	if config.Options.UrAccepted != syncthingclient.DenyUsageReport {
+		logger.Info("Configure UsageReport...")
+		err := r.stClient.SendUsageStatistics(syncthingclient.AllowUsageReport)
+		if err != nil {
+			logger.Error(err, "Error setting UsageReporting")
+			return ctrl.Result{Requeue: true, RequeueAfter: 1 * time.Minute}, err
+		}
+	}
+
+	// === Set a admin password ===
+	// This password is set once, changes in the UI are not reset
+	// To reset the password to the default, change the admin username, this will trigger the reset
+	username := "syncthing"
+	if config.Gui.User != username {
+		logger.Info("Configure authentication")
+		err = r.stClient.SetAuth(username, syncthing_cr.Spec.ApiKey)
+		if err != nil {
+			logger.Error(err, "Error setting user authentication")
+			return ctrl.Result{Requeue: true, RequeueAfter: 1 * time.Minute}, err
+		}
+	}
+
+	logger.Info("Syncthing successfully configured")
+	return ctrl.Result{Requeue: true, RequeueAfter: 10 * time.Minute}, nil
 }
 
 // SetupWithManager sets up the controller with the Manager.
@@ -211,5 +271,7 @@ func (r *InstanceReconciler) SetupWithManager(mgr ctrl.Manager) error {
 	return ctrl.NewControllerManagedBy(mgr).
 		For(&syncthingv1alpha1.Instance{}).
 		Owns(&appsv1.Deployment{}).
+		Owns(&corev1.Service{}).
+		Owns(&corev1.Secret{}).
 		Complete(r)
 }
