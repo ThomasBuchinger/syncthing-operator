@@ -43,6 +43,7 @@ type DeviceStatus struct {
 
 //+kubebuilder:object:root=true
 //+kubebuilder:subresource:status
+//+kubebuilder:resource:scope=Namespaced
 
 // Device is the Schema for the devices API
 type Device struct {

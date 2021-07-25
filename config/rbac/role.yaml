@@ -1,10 +1,11 @@
 
 ---
 apiVersion: rbac.authorization.k8s.io/v1
-kind: ClusterRole
+kind: Role
 metadata:
   creationTimestamp: null
   name: manager-role
+  namespace: default
 rules:
 - apiGroups:
   - apps
@@ -22,6 +23,20 @@ rules:
   - ""
   resources:
   - pods
+  verbs:
+  - get
+  - list
+- apiGroups:
+  - ""
+  resources:
+  - secrets
+  verbs:
+  - get
+  - list
+- apiGroups:
+  - ""
+  resources:
+  - services
   verbs:
   - get
   - list
@@ -47,6 +62,32 @@ rules:
   - syncthing.buc.sh
   resources:
   - devices/status
+  verbs:
+  - get
+  - patch
+  - update
+- apiGroups:
+  - syncthing.buc.sh
+  resources:
+  - folders
+  verbs:
+  - create
+  - delete
+  - get
+  - list
+  - patch
+  - update
+  - watch
+- apiGroups:
+  - syncthing.buc.sh
+  resources:
+  - folders/finalizers
+  verbs:
+  - update
+- apiGroups:
+  - syncthing.buc.sh
+  resources:
+  - folders/status
   verbs:
   - get
   - patch

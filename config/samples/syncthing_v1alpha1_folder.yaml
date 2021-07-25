@@ -3,5 +3,15 @@ kind: Folder
 metadata:
   name: folder-sample
 spec:
-  # Add fields here
-  foo: bar
+  label: "MyTestFolder"
+  path: /var/syncthing/test
+  type: "sendonly"
+  
+  shared_devices:
+  - "Nokia 3.4"
+  shared_ids:
+  - "KJ2KICY-7XOAWLI-4KO7SSL-6K2373Q-2QZLFJ5-LKS63UU-CMJPEOL-T7O5WQY"
+
+  ignore_pattern:
+  - "not_this_file"
+  ignore_permissions: false

@@ -18,7 +18,6 @@ package controllers
 
 import (
 	"context"
-	"net/url"
 	"time"
 
 	"k8s.io/apimachinery/pkg/api/errors"
@@ -38,15 +37,17 @@ import (
 // InstanceReconciler reconciles a Instance object
 type InstanceReconciler struct {
 	client.Client
-	stClient *syncthingclient.StClient
+	StClient *syncthingclient.StClient
 	Scheme   *runtime.Scheme
 }
 
-//+kubebuilder:rbac:groups=syncthing.buc.sh,resources=instances,verbs=get;list;watch;create;update;patch;delete
-//+kubebuilder:rbac:groups=syncthing.buc.sh,resources=instances/status,verbs=get;update;patch
-//+kubebuilder:rbac:groups=syncthing.buc.sh,resources=instances/finalizers,verbs=update
-//+kubebuilder:rbac:groups=apps,resources=deployments,verbs=get;list;watch;create;update;patch;delete
-//+kubebuilder:rbac:groups=core,resources=pods,verbs=get;list;
+//+kubebuilder:rbac:groups=syncthing.buc.sh,namespace=default,resources=instances,verbs=get;list;watch;create;update;patch;delete
+//+kubebuilder:rbac:groups=syncthing.buc.sh,namespace=default,resources=instances/status,verbs=get;update;patch
+//+kubebuilder:rbac:groups=syncthing.buc.sh,namespace=default,resources=instances/finalizers,verbs=update
+//+kubebuilder:rbac:groups=apps,namespace=default,resources=deployments,verbs=get;list;watch;create;update;patch;delete
+//+kubebuilder:rbac:groups=core,namespace=default,resources=pods,verbs=get;list;
+//+kubebuilder:rbac:groups=core,namespace=default,resources=services,verbs=get;list;
+//+kubebuilder:rbac:groups=core,namespace=default,resources=secrets,verbs=get;list;
 
 // Reconcile is part of the main kubernetes reconciliation loop which aims to
 // move the current state of the cluster closer to the desired state.
@@ -59,14 +60,13 @@ type InstanceReconciler struct {
 // - https://pkg.go.dev/sigs.k8s.io/controller-runtime@v0.8.3/pkg/reconcile
 func (r *InstanceReconciler) Reconcile(ctx context.Context, req ctrl.Request) (ctrl.Result, error) {
 	logger := log.FromContext(ctx)
-	logger.Info("In Reconcile...")
 
 	// Get the CustomResource
 	instanceCr := &syncthingv1alpha1.Instance{}
 	err := r.Get(ctx, types.NamespacedName{Namespace: req.Namespace, Name: req.Name}, instanceCr)
 	if err != nil {
 		if errors.IsNotFound(err) {
-			logger.Info("Syncthing Resource deleted.")
+			logger.Info("Syncthing Resource '" + req.Name + "' deleted.")
 			return ctrl.Result{}, nil
 
 		}
@@ -91,7 +91,7 @@ func (r *InstanceReconciler) Reconcile(ctx context.Context, req ctrl.Request) (c
 		logger.Error(err, "Failed to create Secret for TLS config")
 		return ctrl.Result{Requeue: true, RequeueAfter: 1 * time.Minute}, err
 	}
-	logger.Info("Using Secret: " + obj.GetName())
+	logger.V(1).Info("Using Secret: " + obj.GetName())
 	foundSecret := obj.(*corev1.Secret)
 
 	// === Ensure Deployment exists ===
@@ -106,7 +106,7 @@ func (r *InstanceReconciler) Reconcile(ctx context.Context, req ctrl.Request) (c
 		logger.Error(err, "Failed to create Deployment")
 		return ctrl.Result{Requeue: true, RequeueAfter: 1 * time.Minute}, err
 	}
-	logger.Info("Using Deployment: " + obj.GetName())
+	logger.V(1).Info("Using Deployment: " + obj.GetName())
 	foundDeployment := obj.(*appsv1.Deployment)
 
 	// === Ensure Service exists ===
@@ -132,9 +132,7 @@ func (r *InstanceReconciler) Reconcile(ctx context.Context, req ctrl.Request) (c
 		logger.Error(err, "Failed to create Cluster Service")
 		return ctrl.Result{Requeue: true, RequeueAfter: 1 * time.Minute}, nil
 	}
-	logger.Info("Using Service: " + obj.GetName())
-	found_service := obj.(*corev1.Service)
-	logger.Info("Using ClusterIP: " + found_service.Spec.ClusterIP)
+	logger.V(1).Info("Using Service: " + obj.GetName())
 
 	// =============================================
 	// === Apply configuration to the API object ===
@@ -160,7 +158,6 @@ func (r *InstanceReconciler) Reconcile(ctx context.Context, req ctrl.Request) (c
 		getVolumeMountIndexByName(foundDeployment.Spec.Template.Spec.Containers[container_index].VolumeMounts, instanceCr.Spec.TlsConfigName) == -1 {
 		logger.Info("Adding TLS configuration to deployment...")
 		foundDeployment = generateTlsVolumeAndMount(instanceCr, foundSecret, foundDeployment)
-		logger.Info("tls volume mounts", "mount", foundDeployment.Spec.Template.Spec.Containers[container_index].VolumeMounts)
 	}
 
 	// === Ensure all Volumes are present ===
@@ -214,18 +211,16 @@ func (r *InstanceReconciler) Reconcile(ctx context.Context, req ctrl.Request) (c
 	// 		return ctrl.Result{}, err
 	// 	}
 	// }
-	logger.Info("Syncthing Container deployed!")
+	logger.V(1).Info("Syncthing Container deployed!")
 	return r.ReconcileApplication(ctx, req, instanceCr)
 }
 
 func (r *InstanceReconciler) ReconcileApplication(ctx context.Context, req ctrl.Request, syncthing_cr *syncthingv1alpha1.Instance) (ctrl.Result, error) {
 	logger := log.FromContext(ctx)
-	r.stClient = syncthingclient.SetupSyncthingClient(syncthing_cr.Spec.ApiKey)
-	// TODO: Change to actual URL
-	r.stClient.BaseUrl = url.URL{Scheme: "http", Host: "10.0.0.21:32001"}
+	r.StClient.ApiKey = syncthing_cr.Spec.ApiKey
 
 	for i := 0; i < 10; i++ {
-		alive, msg := r.stClient.Ping()
+		alive, msg := r.StClient.Ping()
 		if !alive {
 			logger.Info("Syncthing instance not reachable (yet?): " + msg)
 			return ctrl.Result{Requeue: true, RequeueAfter: 10 * time.Second}, nil
@@ -233,7 +228,7 @@ func (r *InstanceReconciler) ReconcileApplication(ctx context.Context, req ctrl.
 	}
 
 	// === Fetch current Syncthing config ===
-	config, err := r.stClient.GetConfig()
+	config, err := r.StClient.GetConfig()
 	if err != nil {
 		logger.Error(err, "cannot fetch config")
 		return ctrl.Result{Requeue: true, RequeueAfter: 1 * time.Minute}, err
@@ -242,7 +237,7 @@ func (r *InstanceReconciler) ReconcileApplication(ctx context.Context, req ctrl.
 	// === Disable UsegeStatistics to make the popup go away ===
 	if config.Options.UrAccepted != syncthingclient.DenyUsageReport {
 		logger.Info("Configure UsageReport...")
-		err := r.stClient.SendUsageStatistics(syncthingclient.AllowUsageReport)
+		err := r.StClient.SendUsageStatistics(syncthingclient.AllowUsageReport)
 		if err != nil {
 			logger.Error(err, "Error setting UsageReporting")
 			return ctrl.Result{Requeue: true, RequeueAfter: 1 * time.Minute}, err
@@ -255,7 +250,7 @@ func (r *InstanceReconciler) ReconcileApplication(ctx context.Context, req ctrl.
 	username := "syncthing"
 	if config.Gui.User != username {
 		logger.Info("Configure authentication")
-		err = r.stClient.SetAuth(username, syncthing_cr.Spec.ApiKey)
+		err = r.StClient.SetAuth(username, syncthing_cr.Spec.ApiKey)
 		if err != nil {
 			logger.Error(err, "Error setting user authentication")
 			return ctrl.Result{Requeue: true, RequeueAfter: 1 * time.Minute}, err

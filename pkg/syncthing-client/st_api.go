@@ -33,11 +33,26 @@ type DeviceElement struct {
 	MaxSendKbps, MaxRecvKbps                                                   int
 }
 type FolderElement struct {
+	Id, Label, FilesystemType, Path, Type, Order string
+	Devices                                      []DeviceReference
+	IgnorePerms, IgnoreDelete, Paused            bool
+	RescanInterval                               int
+}
+type DeviceReference struct {
+	DeviceId, IntroducedBy, EncryptionPassword string
 }
 
 func (c StClient) GetDeviceIndexById(list []DeviceElement, id string) int {
 	for i, device := range list {
 		if device.DeviceId == id {
+			return i
+		}
+	}
+	return -1
+}
+func (c StClient) GetFolderIndexById(list []FolderElement, id string) int {
+	for i, folder := range list {
+		if folder.Id == id {
 			return i
 		}
 	}
@@ -121,6 +136,31 @@ func (c StClient) ReplaceDevice(dev DeviceElement) error {
 }
 func (c StClient) DeleteDevice(deviceId string) error {
 	req, _ := c.newRequestTemplate("DELETE", "/rest/config/devices/"+deviceId, nil)
+	response, err := c.do(req, nil)
+	if err != nil {
+		return err
+	} else if response.StatusCode != 200 {
+		return errors.New("DELETE Request returned unexpected status: " + response.Status)
+	}
+	return nil
+}
+
+func (c StClient) ReplaceFolder(folder FolderElement) error {
+	req, err := c.newRequestTemplate("PUT", "/rest/config/folders/"+folder.Id, folder)
+	if err != nil {
+		return err
+	}
+	response, err := c.do(req, nil)
+	if err != nil {
+		return err
+	} else if response.StatusCode != 200 {
+		return errors.New("PUT Request returned unexpected status: " + response.Status)
+	}
+
+	return nil
+}
+func (c StClient) DeleteFolder(folderId string) error {
+	req, _ := c.newRequestTemplate("DELETE", "/rest/config/folders/"+folderId, nil)
 	response, err := c.do(req, nil)
 	if err != nil {
 		return err

@@ -1,0 +1,87 @@
+
+---
+apiVersion: apiextensions.k8s.io/v1
+kind: CustomResourceDefinition
+metadata:
+  annotations:
+    controller-gen.kubebuilder.io/version: v0.4.1
+  creationTimestamp: null
+  name: folders.syncthing.buc.sh
+spec:
+  group: syncthing.buc.sh
+  names:
+    kind: Folder
+    listKind: FolderList
+    plural: folders
+    singular: folder
+  scope: Namespaced
+  versions:
+  - name: v1alpha1
+    schema:
+      openAPIV3Schema:
+        description: Folder is the Schema for the folders API
+        properties:
+          apiVersion:
+            description: 'APIVersion defines the versioned schema of this representation
+              of an object. Servers should convert recognized schemas to the latest
+              internal value, and may reject unrecognized values. More info: https://git.k8s.io/community/contributors/devel/sig-architecture/api-conventions.md#resources'
+            type: string
+          kind:
+            description: 'Kind is a string value representing the REST resource this
+              object represents. Servers may infer this from the endpoint the client
+              submits requests to. Cannot be updated. In CamelCase. More info: https://git.k8s.io/community/contributors/devel/sig-architecture/api-conventions.md#types-kinds'
+            type: string
+          metadata:
+            type: object
+          spec:
+            description: FolderSpec defines the desired state of Folder
+            properties:
+              filesystem_type:
+                type: string
+              ignore_delete:
+                type: boolean
+              ignore_pattern:
+                items:
+                  type: string
+                type: array
+              ignore_permissions:
+                type: boolean
+              label:
+                type: string
+              order:
+                type: string
+              path:
+                type: string
+              paused:
+                type: boolean
+              rescan_interval:
+                default: -1
+                type: integer
+              shared_devices:
+                items:
+                  type: string
+                type: array
+              shared_ids:
+                items:
+                  type: string
+                type: array
+              type:
+                type: string
+            required:
+            - label
+            - shared_devices
+            type: object
+          status:
+            description: FolderStatus defines the observed state of Folder
+            type: object
+        type: object
+    served: true
+    storage: true
+    subresources:
+      status: {}
+status:
+  acceptedNames:
+    kind: ""
+    plural: ""
+  conditions: []
+  storedVersions: []

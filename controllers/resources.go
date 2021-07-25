@@ -2,9 +2,11 @@ package controllers
 
 import (
 	syncthingv1alpha1 "github.com/thomasbuchinger/syncthing-operator/api/v1alpha1"
+	"sigs.k8s.io/controller-runtime/pkg/log"
 
 	appsv1 "k8s.io/api/apps/v1"
 	corev1 "k8s.io/api/core/v1"
+	"k8s.io/apimachinery/pkg/api/resource"
 	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
 	"k8s.io/apimachinery/pkg/util/intstr"
 )
@@ -33,6 +35,7 @@ func fillDefaultValues(i *syncthingv1alpha1.Instance) error {
 		}
 	}
 	if getVolumeIndexByName(i.Spec.DataVolumes, "data-root") == -1 {
+		log.Log.Info("No data-root Volume found! Your data WILL be destroyed during if the application restarts!")
 		i.Spec.DataVolumes = append(
 			i.Spec.DataVolumes,
 			corev1.Volume{
@@ -163,6 +166,10 @@ func generateDeployment(syncthing_cr *syncthingv1alpha1.Instance) *appsv1.Deploy
 	image := syncthing_cr.Spec.ImageName
 	tag := syncthing_cr.Spec.Tag
 	var replicas int32 = 1
+	reqCpu, _ := resource.ParseQuantity("50m")
+	reqMem, _ := resource.ParseQuantity("10M")
+	limitCpu, _ := resource.ParseQuantity("500m")
+	limitMem, _ := resource.ParseQuantity("100M")
 
 	return &appsv1.Deployment{
 		ObjectMeta: metav1.ObjectMeta{
@@ -215,11 +222,22 @@ func generateDeployment(syncthing_cr *syncthingv1alpha1.Instance) *appsv1.Deploy
 								},
 							},
 						},
+						Resources: corev1.ResourceRequirements{
+							Requests: corev1.ResourceList{
+								corev1.ResourceCPU:    reqCpu,
+								corev1.ResourceMemory: reqMem,
+							},
+							Limits: corev1.ResourceList{
+								corev1.ResourceCPU:    limitCpu,
+								corev1.ResourceMemory: limitMem,
+							},
+						},
 					}},
 				},
 			},
 		},
 	}
+
 }
 
 func generateClusterService(syncthing_cr *syncthingv1alpha1.Instance) *corev1.Service {

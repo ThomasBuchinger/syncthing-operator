@@ -18,7 +18,10 @@ package main
 
 import (
 	"flag"
+	"fmt"
+	"net/url"
 	"os"
+	"time"
 
 	// Import all Kubernetes client auth plugins (e.g. Azure, GCP, OIDC, etc.)
 	// to ensure that exec-entrypoint and run can make use of them.
@@ -33,6 +36,7 @@ import (
 
 	syncthingv1alpha1 "github.com/thomasbuchinger/syncthing-operator/api/v1alpha1"
 	"github.com/thomasbuchinger/syncthing-operator/controllers"
+	syncthingclient "github.com/thomasbuchinger/syncthing-operator/pkg/syncthing-client"
 	//+kubebuilder:scaffold:imports
 )
 
@@ -52,8 +56,12 @@ func main() {
 	var metricsAddr string
 	var enableLeaderElection bool
 	var probeAddr string
+	var stAddr string
+	var syncPeriod int64
 	flag.StringVar(&metricsAddr, "metrics-bind-address", ":8080", "The address the metric endpoint binds to.")
 	flag.StringVar(&probeAddr, "health-probe-bind-address", ":8081", "The address the probe endpoint binds to.")
+	flag.StringVar(&stAddr, "syncthing-api", "syncthing.svc.cluster.local", "URL of the syncthing Rest-API")
+	flag.Int64Var(&syncPeriod, "sync", 1*60, "Determins the max time between reconciliation runs in minutes. Defaults to every hour")
 	flag.BoolVar(&enableLeaderElection, "leader-elect", false,
 		"Enable leader election for controller manager. "+
 			"Enabling this will ensure there is only one active controller manager.")
@@ -63,8 +71,20 @@ func main() {
 	opts.BindFlags(flag.CommandLine)
 	flag.Parse()
 
-	ctrl.SetLogger(zap.New(zap.UseFlagOptions(&opts)))
+	stClient := syncthingclient.SetupSyncthingClient()
+	if stAddr != "" {
+		stClient.BaseUrl = url.URL{Scheme: "http", Host: stAddr}
+	}
 
+	ctrl.SetLogger(zap.New(zap.UseFlagOptions(&opts)))
+	namespace, err := getWatchNamespaceFromEnv()
+	if err != nil {
+		setupLog.Error(err, "Mandatory WATCH_NAMESPACE environemnt veriable not set")
+		os.Exit(1)
+	}
+
+	fmt.Println("Use NS " + namespace)
+	period := time.Duration(syncPeriod) * time.Minute
 	mgr, err := ctrl.NewManager(ctrl.GetConfigOrDie(), ctrl.Options{
 		Scheme:                 scheme,
 		MetricsBindAddress:     metricsAddr,
@@ -72,6 +92,8 @@ func main() {
 		HealthProbeBindAddress: probeAddr,
 		LeaderElection:         enableLeaderElection,
 		LeaderElectionID:       "3510170c.buc.sh",
+		Namespace:              namespace,
+		SyncPeriod:             &period,
 	})
 	if err != nil {
 		setupLog.Error(err, "unable to start manager")
@@ -79,22 +101,25 @@ func main() {
 	}
 
 	if err = (&controllers.InstanceReconciler{
-		Client: mgr.GetClient(),
-		Scheme: mgr.GetScheme(),
+		Client:   mgr.GetClient(),
+		Scheme:   mgr.GetScheme(),
+		StClient: stClient,
 	}).SetupWithManager(mgr); err != nil {
 		setupLog.Error(err, "unable to create controller", "controller", "Instance")
 		os.Exit(1)
 	}
 	if err = (&controllers.DeviceReconciler{
-		Client: mgr.GetClient(),
-		Scheme: mgr.GetScheme(),
+		Client:   mgr.GetClient(),
+		Scheme:   mgr.GetScheme(),
+		StClient: stClient,
 	}).SetupWithManager(mgr); err != nil {
 		setupLog.Error(err, "unable to create controller", "controller", "Device")
 		os.Exit(1)
 	}
 	if err = (&controllers.FolderReconciler{
-		Client: mgr.GetClient(),
-		Scheme: mgr.GetScheme(),
+		Client:   mgr.GetClient(),
+		Scheme:   mgr.GetScheme(),
+		StClient: stClient,
 	}).SetupWithManager(mgr); err != nil {
 		setupLog.Error(err, "unable to create controller", "controller", "Folder")
 		os.Exit(1)
@@ -115,4 +140,14 @@ func main() {
 		setupLog.Error(err, "problem running manager")
 		os.Exit(1)
 	}
+}
+
+func getWatchNamespaceFromEnv() (string, error) {
+	var watchNamespaceEnvVar = "WATCH_NAMESPACE"
+
+	ns, found := os.LookupEnv(watchNamespaceEnvVar)
+	if !found {
+		return "", fmt.Errorf("%s must be set", watchNamespaceEnvVar)
+	}
+	return ns, nil
 }

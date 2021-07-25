@@ -20,16 +20,24 @@ import (
 	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
 )
 
-// EDIT THIS FILE!  THIS IS SCAFFOLDING FOR YOU TO OWN!
-// NOTE: json tags are required.  Any new fields you add must have json tags for the fields to be serialized.
-
 // FolderSpec defines the desired state of Folder
 type FolderSpec struct {
-	// INSERT ADDITIONAL SPEC FIELDS - desired state of cluster
-	// Important: Run "make" to regenerate code after modifying this file
+	Label             string   `json:"label"`
+	SharedDeviceNames []string `json:"shared_devices"`
 
-	// Foo is an example field of Folder. Edit folder_types.go to remove/update
-	Foo string `json:"foo,omitempty"`
+	Path string `json:"path,omitempty"`
+
+	SharedDeviceIds []string `json:"shared_ids,omitempty"`
+	IgnorePattern   []string `json:"ignore_pattern,omitempty"`
+	Type            string   `json:"type,omitempty"`
+	FilesystemType  string   `json:"filesystem_type,omitempty"`
+	Order           string   `json:"order,omitempty"`
+	IgnorePerms     bool     `json:"ignore_permissions,omitempty"`
+	IgnoreDelete    bool     `json:"ignore_delete,omitempty"`
+	Paused          bool     `json:"paused,omitempty"`
+
+	//+kubebuilder:default:=-1
+	RescanInterval int `json:"rescan_interval,omitempty"`
 }
 
 // FolderStatus defines the observed state of Folder
@@ -40,6 +48,7 @@ type FolderStatus struct {
 
 //+kubebuilder:object:root=true
 //+kubebuilder:subresource:status
+//+kubebuilder:resource:scope=Namespaced
 
 // Folder is the Schema for the folders API
 type Folder struct {

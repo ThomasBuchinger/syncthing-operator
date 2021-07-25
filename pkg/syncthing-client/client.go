@@ -14,10 +14,10 @@ type StClient struct {
 	HttpClient http.Client
 }
 
-func SetupSyncthingClient(apikey string) *StClient {
+func SetupSyncthingClient() *StClient {
 	c := new(StClient)
 	c.BaseUrl = GetSyncthingDefaultUrl()
-	c.ApiKey = apikey
+	c.ApiKey = ""
 	c.HttpClient = *http.DefaultClient
 	return c
 }

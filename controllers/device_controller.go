@@ -19,7 +19,6 @@ package controllers
 import (
 	"context"
 	"fmt"
-	"net/url"
 	"time"
 
 	corev1 "k8s.io/api/core/v1"
@@ -41,9 +40,10 @@ type DeviceReconciler struct {
 	Scheme   *runtime.Scheme
 }
 
-//+kubebuilder:rbac:groups=syncthing.buc.sh,resources=devices,verbs=get;list;watch;create;update;patch;delete
-//+kubebuilder:rbac:groups=syncthing.buc.sh,resources=devices/status,verbs=get;update;patch
-//+kubebuilder:rbac:groups=syncthing.buc.sh,resources=devices/finalizers,verbs=update
+//+kubebuilder:rbac:groups=syncthing.buc.sh,namespace=default,resources=devices,verbs=get;list;watch;create;update;patch;delete
+//+kubebuilder:rbac:groups=syncthing.buc.sh,namespace=default,resources=devices/status,verbs=get;update;patch
+//+kubebuilder:rbac:groups=syncthing.buc.sh,namespace=default,resources=devices/finalizers,verbs=update
+//+kubebuilder:rbac:groups=core,namespace=default,resources=secrets,verbs=get;list;
 
 // Reconcile is part of the main kubernetes reconciliation loop which aims to
 // move the current state of the cluster closer to the desired state.
@@ -56,12 +56,10 @@ type DeviceReconciler struct {
 // - https://pkg.go.dev/sigs.k8s.io/controller-runtime@v0.8.3/pkg/reconcile
 func (r *DeviceReconciler) Reconcile(ctx context.Context, req ctrl.Request) (ctrl.Result, error) {
 	logger := log.FromContext(ctx)
-	logger.Info("In DeviceReconsile...")
 
 	// === Make sure we have a connection to Syncthing API ===
 	apiKey, _ := findApikeyInNamespace(req.Namespace, r.Client, ctx)
-	r.StClient = syncthingclient.SetupSyncthingClient(apiKey)
-	r.StClient.BaseUrl = url.URL{Scheme: "http", Host: "10.0.0.21:32001"}
+	r.StClient.ApiKey = apiKey
 
 	alive, msg := r.StClient.Ping()
 	if !alive {
@@ -95,6 +93,7 @@ func (r *DeviceReconciler) Reconcile(ctx context.Context, req ctrl.Request) (ctr
 	changed := false
 	if deviceIndex == -1 {
 		device = generateStDeviceConfig(*deviceCr)
+		changed = true
 	} else {
 		device = config.Devices[deviceIndex]
 	}
@@ -130,13 +129,14 @@ func (r *DeviceReconciler) Reconcile(ctx context.Context, req ctrl.Request) (ctr
 
 	if !changed {
 		logger.Info("Device not changed: " + req.Name)
-		return ctrl.Result{Requeue: true, RequeueAfter: 10 * time.Second}, nil
+		return ctrl.Result{Requeue: true, RequeueAfter: 10 * time.Minute}, nil
 	}
 
 	logger.Info("Updating Device Configuration: " + deviceCr.Name)
 	err = r.StClient.ReplaceDevice(device)
 	if err != nil {
 		logger.Error(err, "Error configuring device")
+		return ctrl.Result{Requeue: true, RequeueAfter: 10 * time.Second}, nil
 	} else {
 		logger.Info("Device successfully configured: " + req.Name)
 	}

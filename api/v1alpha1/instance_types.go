@@ -52,6 +52,7 @@ type InstanceStatus struct {
 
 //+kubebuilder:object:root=true
 //+kubebuilder:subresource:status
+//+kubebuilder:resource:scope=Namespaced
 
 // Instance is the Schema for the instances API
 type Instance struct {
