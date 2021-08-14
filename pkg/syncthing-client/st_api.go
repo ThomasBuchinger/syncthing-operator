@@ -24,7 +24,8 @@ type GuiElement struct {
 }
 
 type OptionsElement struct {
-	UrAccepted UseageReport
+	UrAccepted               UseageReport
+	MaxSendKbps, MaxRecvKbps int
 }
 type DeviceElement struct {
 	DeviceId, Name, Compression, CertName, IntroducedBy                        string
@@ -97,13 +98,37 @@ func (c StClient) SendUsageStatistics(sendIt UseageReport) error {
 		return errors.New("Syncthing returned: " + response.Status)
 	}
 }
-func (c StClient) SetAuth(username string, password string) error {
+func (c StClient) SetSpeed(send int64, receive int64) error {
 	newSettings := struct {
+		MaxSendKbps, MaxRecvKbps int
+	}{
+		MaxSendKbps: int(send),
+		MaxRecvKbps: int(receive),
+	}
+	req, err := c.newRequestTemplate("PATCH", "/rest/config/options", newSettings)
+	if err != nil {
+		return err
+	}
+	response, err := c.do(req, nil)
+	if err != nil {
+		return err
+	}
+	if response.StatusCode == 200 {
+		return nil
+	} else {
+		return errors.New("Syncthing returned: " + response.Status)
+	}
+}
+
+func (c StClient) SetAuth(enabled bool, username string, password string) error {
+	newSettings := struct {
+		InsecureAdminAccess      bool
 		AuthMode, User, Password string
 	}{
-		AuthMode: "static",
-		User:     username,
-		Password: password,
+		InsecureAdminAccess: enabled,
+		AuthMode:            "static",
+		User:                username,
+		Password:            password,
 	}
 	req, err := c.newRequestTemplate("PATCH", "/rest/config/gui", newSettings)
 	if err != nil {

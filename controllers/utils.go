@@ -1,12 +1,10 @@
 package controllers
 
 import (
-	"context"
 	"fmt"
 
 	"k8s.io/apimachinery/pkg/api/errors"
 	"k8s.io/apimachinery/pkg/types"
-	ctrl "sigs.k8s.io/controller-runtime"
 	"sigs.k8s.io/controller-runtime/pkg/client"
 )
 
@@ -27,8 +25,8 @@ const (
 	Existed
 )
 
-func FindObject(r *InstanceReconciler, ctx context.Context, req ctrl.Request, obj client.Object) (client.Object, FindReturnValues, error) {
-	err := r.Get(ctx, types.NamespacedName{Namespace: req.Namespace, Name: obj.GetName()}, obj)
+func FindObject(r *InstanceReconciler, ns string, obj client.Object) (client.Object, FindReturnValues, error) {
+	err := r.Get(r.ctx, types.NamespacedName{Namespace: ns, Name: obj.GetName()}, obj)
 	if err != nil {
 		if errors.IsNotFound(err) {
 			return nil, Deleted, err
@@ -39,10 +37,10 @@ func FindObject(r *InstanceReconciler, ctx context.Context, req ctrl.Request, ob
 	return obj, Found, nil
 }
 
-func GetOrCreate(r *InstanceReconciler, ctx context.Context, req ctrl.Request, obj client.Object) (client.Object, CreateReturnValues, error) {
-	err := r.Get(ctx, types.NamespacedName{Namespace: req.Namespace, Name: obj.GetName()}, obj)
+func GetOrCreate(r *InstanceReconciler, ns string, obj client.Object) (client.Object, CreateReturnValues, error) {
+	err := r.Get(r.ctx, types.NamespacedName{Namespace: ns, Name: obj.GetName()}, obj)
 	if err != nil && errors.IsNotFound(err) {
-		err2 := r.Create(ctx, obj)
+		err2 := r.Create(r.ctx, obj)
 
 		if err2 != nil {
 			fmt.Println("Failed to create:", obj.GetName())

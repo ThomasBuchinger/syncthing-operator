@@ -2,7 +2,7 @@ package controllers
 
 import (
 	syncthingv1alpha1 "github.com/thomasbuchinger/syncthing-operator/api/v1alpha1"
-	"sigs.k8s.io/controller-runtime/pkg/log"
+	syncthingclient "github.com/thomasbuchinger/syncthing-operator/pkg/syncthing-client"
 
 	appsv1 "k8s.io/api/apps/v1"
 	corev1 "k8s.io/api/core/v1"
@@ -34,19 +34,25 @@ func fillDefaultValues(i *syncthingv1alpha1.Instance) error {
 			},
 		}
 	}
-	if getVolumeIndexByName(i.Spec.DataVolumes, "data-root") == -1 {
-		log.Log.Info("No data-root Volume found! Your data WILL be destroyed during if the application restarts!")
-		i.Spec.DataVolumes = append(
-			i.Spec.DataVolumes,
-			corev1.Volume{
-				Name: "data-root",
-				VolumeSource: corev1.VolumeSource{
-					EmptyDir: &corev1.EmptyDirVolumeSource{},
-				},
+	if i.Spec.DataRoot == default_volume {
+		i.Spec.DataRoot = corev1.Volume{
+			Name: "data-root",
+			VolumeSource: corev1.VolumeSource{
+				EmptyDir: &corev1.EmptyDirVolumeSource{},
 			},
-		)
+		}
 	}
-
+	default_quantity := resource.Quantity{}
+	if i.Spec.MaxReceiveSpeed == default_quantity {
+		i.Spec.MaxReceiveSpeedValue = 0
+	} else {
+		i.Spec.MaxReceiveSpeedValue = i.Spec.MaxReceiveSpeed.ScaledValue(resource.Kilo)
+	}
+	if i.Spec.MaxSendSpeed == default_quantity {
+		i.Spec.MaxSendSpeedValue = 0
+	} else {
+		i.Spec.MaxSendSpeedValue = i.Spec.MaxSendSpeed.ScaledValue(resource.Kilo)
+	}
 	return nil
 }
 func commonSyncthingLabels(name string) map[string]string {
@@ -139,7 +145,7 @@ func generateVolumeMountConfigs(syncthing_cr *syncthingv1alpha1.Instance, volume
 // TLS config for Syncthing
 func generateTlsSecret(syncthing_cr *syncthingv1alpha1.Instance) *corev1.Secret {
 	secretLabels := commonSyncthingLabels(syncthing_cr.Name)
-	secretLabels["api.syncthing.buc.sh"] = "plain"
+	secretLabels[syncthingclient.StClientConfigLabel] = "plain"
 	secretLabels["cert.syncthing.buc.sh"] = "pem"
 	secretLabels["key.syncthing.buc.sh"] = "pem"
 
@@ -151,7 +157,8 @@ func generateTlsSecret(syncthing_cr *syncthingv1alpha1.Instance) *corev1.Secret 
 		},
 		Type: corev1.SecretTypeTLS,
 		Data: map[string][]byte{
-			"apikey":  []byte(syncthing_cr.Spec.ApiKey),
+			"url":     []byte(syncthing_cr.Spec.Clientconfig.ApiUrl),
+			"apikey":  []byte(syncthing_cr.Spec.Clientconfig.ApiKey),
 			"tls.key": []byte(syncthing_cr.Spec.TlsKey),
 			"tls.crt": []byte(syncthing_cr.Spec.TlsCrt),
 		},
@@ -198,7 +205,7 @@ func generateDeployment(syncthing_cr *syncthingv1alpha1.Instance) *appsv1.Deploy
 							"serve",
 							"--config=" + syncthing_cr.Spec.ConfigPath,
 							"--data=" + syncthing_cr.Spec.DataPath,
-							"--gui-apikey=" + syncthing_cr.Spec.ApiKey,
+							"--gui-apikey=" + syncthing_cr.Spec.Clientconfig.ApiKey,
 						},
 						Ports: []corev1.ContainerPort{
 							{
@@ -217,7 +224,7 @@ func generateDeployment(syncthing_cr *syncthingv1alpha1.Instance) *appsv1.Deploy
 									Port: intstr.FromString("http"),
 									HTTPHeaders: []corev1.HTTPHeader{{
 										Name:  "X-API-Key",
-										Value: syncthing_cr.Spec.ApiKey,
+										Value: syncthing_cr.Spec.Clientconfig.ApiKey,
 									}},
 								},
 							},
@@ -254,6 +261,11 @@ func generateClusterService(syncthing_cr *syncthingv1alpha1.Instance) *corev1.Se
 				Port:       8384,
 				TargetPort: intstr.FromString("http"),
 				Protocol:   corev1.ProtocolTCP,
+			}, {
+				Name:       "sync",
+				TargetPort: intstr.FromString("sync"),
+				Port:       int32(syncthing_cr.Spec.SyncPort),
+				Protocol:   corev1.ProtocolUDP,
 			}},
 		},
 	}

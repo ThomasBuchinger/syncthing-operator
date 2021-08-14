@@ -21,7 +21,6 @@ import (
 	"fmt"
 	"time"
 
-	corev1 "k8s.io/api/core/v1"
 	"k8s.io/apimachinery/pkg/api/errors"
 	"k8s.io/apimachinery/pkg/runtime"
 	"k8s.io/apimachinery/pkg/types"
@@ -56,10 +55,26 @@ type DeviceReconciler struct {
 // - https://pkg.go.dev/sigs.k8s.io/controller-runtime@v0.8.3/pkg/reconcile
 func (r *DeviceReconciler) Reconcile(ctx context.Context, req ctrl.Request) (ctrl.Result, error) {
 	logger := log.FromContext(ctx)
+	deleteDeviceFromSyncthing := false
+
+	// === Get the Device CR ===
+	deviceCr := &syncthingv1alpha1.Device{}
+	err := r.Get(ctx, types.NamespacedName{Namespace: req.Namespace, Name: req.Name}, deviceCr)
+	if err != nil {
+		if errors.IsNotFound(err) {
+			deleteDeviceFromSyncthing = true // defer deletion until we fetched the current syncthing config
+		} else {
+			logger.Error(err, "Something went terrible wrong!")
+			return ctrl.Result{}, err
+		}
+	}
 
 	// === Make sure we have a connection to Syncthing API ===
-	apiKey, _ := findApikeyInNamespace(req.Namespace, r.Client, ctx)
-	r.StClient.ApiKey = apiKey
+	r.StClient, err = syncthingclient.FromCr(deviceCr.Spec.Clientconfig, req.Namespace, r.Client, ctx)
+	if err != nil {
+		logger.Error(err, "Error initializing Syncthing Client")
+		return ctrl.Result{}, err
+	}
 
 	alive, msg := r.StClient.Ping()
 	if !alive {
@@ -74,17 +89,9 @@ func (r *DeviceReconciler) Reconcile(ctx context.Context, req ctrl.Request) (ctr
 		return ctrl.Result{}, err
 	}
 
-	// === Get the Device CR ===
-	deviceCr := &syncthingv1alpha1.Device{}
-	err = r.Get(ctx, types.NamespacedName{Namespace: req.Namespace, Name: req.Name}, deviceCr)
-	if err != nil {
-		if errors.IsNotFound(err) {
-			logger.Info("Device Resource deleted. Configuring Syncthing...")
-			return r.ReconcileDeletion(req, config)
-
-		}
-		logger.Error(err, "Something went terrible wrong!")
-		return ctrl.Result{}, err
+	if deleteDeviceFromSyncthing {
+		logger.Info("Device Resource deleted. Configuring Syncthing...")
+		return r.ReconcileDeletion(req, config)
 	}
 
 	// === check if device is present ===
@@ -113,19 +120,12 @@ func (r *DeviceReconciler) Reconcile(ctx context.Context, req ctrl.Request) (ctr
 	}
 
 	// === Check MaxSendSpeed ===
-	new_value := int(deviceCr.Spec.MaxSendSpeed.Value()) / 1000 * 8
-	if device.MaxSendKbps != new_value {
-		logger.Info(fmt.Sprintf("Setting Max Send Speed from %d kilobytes/s to %s-bytes/s", device.MaxSendKbps/8, deviceCr.Spec.MaxSendSpeed.String()))
-		device.MaxSendKbps = new_value
-		changed = true
-	}
-	// === Check MaxReceiveSpeed ===
-	new_value = int(deviceCr.Spec.MaxReceiveSpeed.Value()) / 1000 * 8
-	if device.MaxRecvKbps != new_value {
-		logger.Info(fmt.Sprintf("Setting Max Receive Speed from %d kilobytes/s to %s-bytes/s", device.MaxRecvKbps/8, deviceCr.Spec.MaxReceiveSpeed.String()))
-		device.MaxRecvKbps = new_value
-		changed = true
-	}
+	// new_value := int(deviceCr.Spec.MaxSendSpeed.Value()) / 1000 * 8
+	// if device.MaxSendKbps != new_value {
+	// 	logger.Info(fmt.Sprintf("Setting Max Send Speed from %d kilobytes/s to %s-bytes/s", device.MaxSendKbps/8, deviceCr.Spec.MaxSendSpeed.String()))
+	// 	device.MaxSendKbps = new_value
+	// 	changed = true
+	// }
 
 	if !changed {
 		logger.Info("Device not changed: " + req.Name)
@@ -142,23 +142,6 @@ func (r *DeviceReconciler) Reconcile(ctx context.Context, req ctrl.Request) (ctr
 	}
 	return ctrl.Result{Requeue: true, RequeueAfter: 10 * time.Second}, nil
 
-}
-
-func findApikeyInNamespace(ns string, c interface{ client.Client }, ctx context.Context) (string, error) {
-	secrets := &corev1.SecretList{}
-	err := c.List(ctx, secrets, client.InNamespace(ns), client.HasLabels{"api.syncthing.buc.sh"})
-	if err != nil {
-		return "No Secret with 'api.syncthing.buc.sh' label", err
-	}
-	size := len(secrets.Items)
-	if size != 1 {
-		return "Ambigous. More than 1 secret matched" + fmt.Sprint(size), errors.NewBadRequest("API Secret")
-	}
-	apikey := string(secrets.Items[0].Data["apikey"])
-	if apikey == "" {
-		return "Invalid. Secret has no apikey", errors.NewBadRequest("API Secret")
-	}
-	return apikey, nil
 }
 
 func (r *DeviceReconciler) ReconcileDeletion(req ctrl.Request, config syncthingclient.StConfig) (ctrl.Result, error) {

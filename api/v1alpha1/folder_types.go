@@ -17,15 +17,20 @@ limitations under the License.
 package v1alpha1
 
 import (
+	syncthingclient "github.com/thomasbuchinger/syncthing-operator/pkg/syncthing-client"
 	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
 )
 
 // FolderSpec defines the desired state of Folder
 type FolderSpec struct {
+
+	// Embed Syncthing API info into FolderSpec.
+	// This allows the operator to control an external Syncthing instance
+	Clientconfig syncthingclient.StClientConfig `json:",inline"`
+
 	Label             string   `json:"label"`
 	SharedDeviceNames []string `json:"shared_devices"`
-
-	Path string `json:"path,omitempty"`
+	Path              string   `json:"path,omitempty"`
 
 	SharedDeviceIds []string `json:"shared_ids,omitempty"`
 	IgnorePattern   []string `json:"ignore_pattern,omitempty"`

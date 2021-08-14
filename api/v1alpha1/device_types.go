@@ -17,22 +17,32 @@ limitations under the License.
 package v1alpha1
 
 import (
-	"k8s.io/apimachinery/pkg/api/resource"
+	syncthingclient "github.com/thomasbuchinger/syncthing-operator/pkg/syncthing-client"
 	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
 )
 
 // DeviceSpec defines the desired state of Device
 type DeviceSpec struct {
+	// Embed Syncthing API info into DeviceSpec.
+	// This allows the operator to control an external Syncthing instance
+	Clientconfig syncthingclient.StClientConfig `json:",inline"`
+
+	// Syncthing DeviceID
+	//+kubebuilder:validation:Pattern=`[A-Z][7]([A-Z\-]{7}){7}`
 	DeviceId string `json:"id"`
 
+	// Automatically Accept all Folders shared from this Device
 	//+kubebuilder:default:=true
-	AutoAcceptFolders bool              `json:"auto_accept,omitempty"`
-	MaxSendSpeed      resource.Quantity `json:"max_send_speed,omitempty"`
-	MaxReceiveSpeed   resource.Quantity `json:"max_receive_speed,omitempty"`
-	Paused            bool              `json:"paused,omitempty"`
-	Untrusted         bool              `json:"untrusted,omitempty"`
+	AutoAcceptFolders bool `json:"auto_accept,omitempty"`
+	// Pause syncronization with this Device
+	Paused bool `json:"paused,omitempty"`
+	// Set an untrusted password.
+	// Data is encrypted with this password, so the receiver cannot read it
+	Untrusted string `json:"untrusted,omitempty"`
 
 	IgnoredFolders []string `json:"ignored_folders,omitempty"`
+	// MaxSendSpeed      resource.Quantity `json:"max_send_speed,omitempty"`
+	// MaxReceiveSpeed   resource.Quantity `json:"max_receive_speed,omitempty"`
 }
 
 // DeviceStatus defines the observed state of Device

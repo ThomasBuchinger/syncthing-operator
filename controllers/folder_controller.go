@@ -55,10 +55,26 @@ type FolderReconciler struct {
 // - https://pkg.go.dev/sigs.k8s.io/controller-runtime@v0.8.3/pkg/reconcile
 func (r *FolderReconciler) Reconcile(ctx context.Context, req ctrl.Request) (ctrl.Result, error) {
 	logger := log.FromContext(ctx)
+	deleteFolderFromSyncthing := false
+
+	// === Get the Device CR ===
+	folderCr := &syncthingv1alpha1.Folder{}
+	err := r.Get(ctx, types.NamespacedName{Namespace: req.Namespace, Name: req.Name}, folderCr)
+	if err != nil {
+		if errors.IsNotFound(err) {
+			deleteFolderFromSyncthing = true
+		} else {
+			logger.Error(err, "Something went terrible wrong!")
+			return ctrl.Result{}, err
+		}
+	}
 
 	// === Make sure we have a connection to Syncthing API ===
-	apiKey, _ := findApikeyInNamespace(req.Namespace, r.Client, ctx)
-	r.StClient.ApiKey = apiKey
+	r.StClient, err = syncthingclient.FromCr(folderCr.Spec.Clientconfig, req.Namespace, r.Client, ctx)
+	if err != nil {
+		logger.Error(err, "Error initializing Syncthing Client")
+		return ctrl.Result{}, err
+	}
 
 	alive, msg := r.StClient.Ping()
 	if !alive {
@@ -73,18 +89,10 @@ func (r *FolderReconciler) Reconcile(ctx context.Context, req ctrl.Request) (ctr
 		return ctrl.Result{}, err
 	}
 
-	// === Get the Device CR ===
-	folderCr := &syncthingv1alpha1.Folder{}
-	err = r.Get(ctx, types.NamespacedName{Namespace: req.Namespace, Name: req.Name}, folderCr)
-	if err != nil {
-		if errors.IsNotFound(err) {
-			logger.Info("Device Resource deleted. Configuring Syncthing...")
-			r.StClient.DeleteFolder(req.Name)
-			return ctrl.Result{}, nil
-
-		}
-		logger.Error(err, "Something went terrible wrong!")
-		return ctrl.Result{}, err
+	if deleteFolderFromSyncthing {
+		logger.Info("Device Resource deleted. Configuring Syncthing...")
+		r.StClient.DeleteFolder(req.Name)
+		return ctrl.Result{}, nil
 	}
 
 	// === check if device is present ===
