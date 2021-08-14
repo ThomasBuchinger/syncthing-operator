@@ -1,25 +1,23 @@
-
----
 apiVersion: apiextensions.k8s.io/v1
 kind: CustomResourceDefinition
 metadata:
   annotations:
     controller-gen.kubebuilder.io/version: v0.4.1
   creationTimestamp: null
-  name: folders.syncthing.buc.sh
+  name: devices.syncthing.buc.sh
 spec:
   group: syncthing.buc.sh
   names:
-    kind: Folder
-    listKind: FolderList
-    plural: folders
-    singular: folder
+    kind: Device
+    listKind: DeviceList
+    plural: devices
+    singular: device
   scope: Namespaced
   versions:
   - name: v1
     schema:
       openAPIV3Schema:
-        description: Folder is the Schema for the folders API
+        description: Device is the Schema for the devices API
         properties:
           apiVersion:
             description: 'APIVersion defines the versioned schema of this representation
@@ -34,53 +32,40 @@ spec:
           metadata:
             type: object
           spec:
-            description: FolderSpec defines the desired state of Folder
+            description: DeviceSpec defines the desired state of Device
             properties:
               apikey:
                 default: ""
                 type: string
-              filesystem_type:
-                type: string
-              ignore_delete:
+              auto_accept:
+                default: true
+                description: Automatically Accept all Folders shared from this Device
                 type: boolean
-              ignore_pattern:
+              id:
+                description: Syncthing DeviceID
+                pattern: '[A-Z][7]([A-Z\-]{7}){7}'
+                type: string
+              ignored_folders:
                 items:
                   type: string
                 type: array
-              ignore_permissions:
-                type: boolean
-              label:
-                type: string
-              order:
-                type: string
-              path:
-                type: string
               paused:
+                description: Pause syncronization with this Device
                 type: boolean
-              rescan_interval:
-                default: -1
-                type: integer
-              shared_devices:
-                items:
-                  type: string
-                type: array
-              shared_ids:
-                items:
-                  type: string
-                type: array
-              type:
+              untrusted:
+                description: Set an untrusted password. Data is encrypted with this
+                  password, so the receiver cannot read it
                 type: string
               url:
                 default: http://syncthing.svc.cluster.local:8384
                 type: string
             required:
             - apikey
-            - label
-            - shared_devices
+            - id
             - url
             type: object
           status:
-            description: FolderStatus defines the observed state of Folder
+            description: DeviceStatus defines the observed state of Device
             type: object
         type: object
     served: true

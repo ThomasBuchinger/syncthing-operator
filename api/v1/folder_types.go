@@ -14,39 +14,39 @@ See the License for the specific language governing permissions and
 limitations under the License.
 */
 
-package v1alpha1
+package v1
 
 import (
 	syncthingclient "github.com/thomasbuchinger/syncthing-operator/pkg/syncthing-client"
 	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
 )
 
-// DeviceSpec defines the desired state of Device
-type DeviceSpec struct {
-	// Embed Syncthing API info into DeviceSpec.
+// FolderSpec defines the desired state of Folder
+type FolderSpec struct {
+
+	// Embed Syncthing API info into FolderSpec.
 	// This allows the operator to control an external Syncthing instance
 	Clientconfig syncthingclient.StClientConfig `json:",inline"`
 
-	// Syncthing DeviceID
-	//+kubebuilder:validation:Pattern=`[A-Z][7]([A-Z\-]{7}){7}`
-	DeviceId string `json:"id"`
+	Label             string   `json:"label"`
+	SharedDeviceNames []string `json:"shared_devices"`
+	Path              string   `json:"path,omitempty"`
 
-	// Automatically Accept all Folders shared from this Device
-	//+kubebuilder:default:=true
-	AutoAcceptFolders bool `json:"auto_accept,omitempty"`
-	// Pause syncronization with this Device
-	Paused bool `json:"paused,omitempty"`
-	// Set an untrusted password.
-	// Data is encrypted with this password, so the receiver cannot read it
-	Untrusted string `json:"untrusted,omitempty"`
+	SharedDeviceIds []string `json:"shared_ids,omitempty"`
+	IgnorePattern   []string `json:"ignore_pattern,omitempty"`
+	Type            string   `json:"type,omitempty"`
+	FilesystemType  string   `json:"filesystem_type,omitempty"`
+	Order           string   `json:"order,omitempty"`
+	IgnorePerms     bool     `json:"ignore_permissions,omitempty"`
+	IgnoreDelete    bool     `json:"ignore_delete,omitempty"`
+	Paused          bool     `json:"paused,omitempty"`
 
-	IgnoredFolders []string `json:"ignored_folders,omitempty"`
-	// MaxSendSpeed      resource.Quantity `json:"max_send_speed,omitempty"`
-	// MaxReceiveSpeed   resource.Quantity `json:"max_receive_speed,omitempty"`
+	//+kubebuilder:default:=-1
+	RescanInterval int `json:"rescan_interval,omitempty"`
 }
 
-// DeviceStatus defines the observed state of Device
-type DeviceStatus struct {
+// FolderStatus defines the observed state of Folder
+type FolderStatus struct {
 	// INSERT ADDITIONAL STATUS FIELD - define observed state of cluster
 	// Important: Run "make" to regenerate code after modifying this file
 }
@@ -55,24 +55,24 @@ type DeviceStatus struct {
 //+kubebuilder:subresource:status
 //+kubebuilder:resource:scope=Namespaced
 
-// Device is the Schema for the devices API
-type Device struct {
+// Folder is the Schema for the folders API
+type Folder struct {
 	metav1.TypeMeta   `json:",inline"`
 	metav1.ObjectMeta `json:"metadata,omitempty"`
 
-	Spec   DeviceSpec   `json:"spec,omitempty"`
-	Status DeviceStatus `json:"status,omitempty"`
+	Spec   FolderSpec   `json:"spec,omitempty"`
+	Status FolderStatus `json:"status,omitempty"`
 }
 
 //+kubebuilder:object:root=true
 
-// DeviceList contains a list of Device
-type DeviceList struct {
+// FolderList contains a list of Folder
+type FolderList struct {
 	metav1.TypeMeta `json:",inline"`
 	metav1.ListMeta `json:"metadata,omitempty"`
-	Items           []Device `json:"items"`
+	Items           []Folder `json:"items"`
 }
 
 func init() {
-	SchemeBuilder.Register(&Device{}, &DeviceList{})
+	SchemeBuilder.Register(&Folder{}, &FolderList{})
 }

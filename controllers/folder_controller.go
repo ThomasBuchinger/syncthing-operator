@@ -28,7 +28,7 @@ import (
 	"sigs.k8s.io/controller-runtime/pkg/client"
 	"sigs.k8s.io/controller-runtime/pkg/log"
 
-	syncthingv1alpha1 "github.com/thomasbuchinger/syncthing-operator/api/v1alpha1"
+	syncthingv1 "github.com/thomasbuchinger/syncthing-operator/api/v1"
 	syncthingclient "github.com/thomasbuchinger/syncthing-operator/pkg/syncthing-client"
 )
 
@@ -58,7 +58,7 @@ func (r *FolderReconciler) Reconcile(ctx context.Context, req ctrl.Request) (ctr
 	deleteFolderFromSyncthing := false
 
 	// === Get the Device CR ===
-	folderCr := &syncthingv1alpha1.Folder{}
+	folderCr := &syncthingv1.Folder{}
 	err := r.Get(ctx, types.NamespacedName{Namespace: req.Namespace, Name: req.Name}, folderCr)
 	if err != nil {
 		if errors.IsNotFound(err) {
@@ -187,7 +187,7 @@ func (r *FolderReconciler) Reconcile(ctx context.Context, req ctrl.Request) (ctr
 	return ctrl.Result{Requeue: true, RequeueAfter: 10 * time.Second}, nil
 }
 
-func generateStFolderConfig(folderCr syncthingv1alpha1.Folder) syncthingclient.FolderElement {
+func generateStFolderConfig(folderCr syncthingv1.Folder) syncthingclient.FolderElement {
 	return syncthingclient.FolderElement{
 		Id:    folderCr.Name,
 		Label: folderCr.Spec.Label,
@@ -204,7 +204,7 @@ func generateStFolderConfig(folderCr syncthingv1alpha1.Folder) syncthingclient.F
 	}
 }
 
-func fillFolderDefaults(folderCr *syncthingv1alpha1.Folder) {
+func fillFolderDefaults(folderCr *syncthingv1.Folder) {
 	if folderCr.Spec.Path == "" {
 		folderCr.Spec.Path = "/var/syncthing/" + folderCr.Name
 	}
@@ -225,6 +225,6 @@ func fillFolderDefaults(folderCr *syncthingv1alpha1.Folder) {
 // SetupWithManager sets up the controller with the Manager.
 func (r *FolderReconciler) SetupWithManager(mgr ctrl.Manager) error {
 	return ctrl.NewControllerManagedBy(mgr).
-		For(&syncthingv1alpha1.Folder{}).
+		For(&syncthingv1.Folder{}).
 		Complete(r)
 }

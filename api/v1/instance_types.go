@@ -14,7 +14,7 @@ See the License for the specific language governing permissions and
 limitations under the License.
 */
 
-package v1alpha1
+package v1
 
 import (
 	syncthingclient "github.com/thomasbuchinger/syncthing-operator/pkg/syncthing-client"
@@ -81,7 +81,7 @@ type InstanceSpec struct {
 	// The users password is set to the Apikey
 	//+kubebuilder:default:="syncthing"
 	AdminUser string `json:"admin_user,omitempty"`
-	// Hardcode Syncthing Certificate for HTTPS
+	// Hardcode Syncthing Certificate for HTTPS (not yet implemented)
 	// If you don't want the operator to manage the https certificat, add a Kubernetes Secret with label "https-cert.syncthing.buc.sh", "https-key.syncthing.buc.sh" respectively to manage those secrets yourself
 	// If no Secret is found and nothing is specified, HTTPS will not be enabled
 	//+kubebuilder:validation:Pattern=`(-----BEGIN CERTIFICATE-----(\n|\r|\r\n)([0-9a-zA-Z\+\/=]{64}(\n|\r|\r\n))*([0-9a-zA-Z\+\/=]{1,63}(\n|\r|\r\n))?-----END CERTIFICATE-----)`

@@ -1,7 +1,7 @@
 package controllers
 
 import (
-	syncthingv1alpha1 "github.com/thomasbuchinger/syncthing-operator/api/v1alpha1"
+	syncthingv1 "github.com/thomasbuchinger/syncthing-operator/api/v1"
 	syncthingclient "github.com/thomasbuchinger/syncthing-operator/pkg/syncthing-client"
 
 	appsv1 "k8s.io/api/apps/v1"
@@ -11,7 +11,7 @@ import (
 	"k8s.io/apimachinery/pkg/util/intstr"
 )
 
-func fillDefaultValues(i *syncthingv1alpha1.Instance) error {
+func fillDefaultValues(i *syncthingv1.Instance) error {
 	i.Spec.DataPath = "/var/syncthing/"
 	i.Spec.ConfigPath = "/etc/syncthing/"
 	i.Spec.ContainerName = "syncthing"
@@ -86,7 +86,7 @@ func getVolumeMountIndexByName(list []corev1.VolumeMount, name string) int {
 	return -1
 }
 
-func generateTlsVolumeAndMount(syncthing_cr *syncthingv1alpha1.Instance, secret *corev1.Secret, deployment *appsv1.Deployment) *appsv1.Deployment {
+func generateTlsVolumeAndMount(syncthing_cr *syncthingv1.Instance, secret *corev1.Secret, deployment *appsv1.Deployment) *appsv1.Deployment {
 	// var permissions int32 = 0777
 	tlsVolume := corev1.Volume{
 		Name: syncthing_cr.Spec.TlsConfigName,
@@ -121,7 +121,7 @@ func generateTlsVolumeAndMount(syncthing_cr *syncthingv1alpha1.Instance, secret 
 	return deployment
 }
 
-func generateVolumeMountConfigs(syncthing_cr *syncthingv1alpha1.Instance, volumes []corev1.Volume) map[string]corev1.VolumeMount {
+func generateVolumeMountConfigs(syncthing_cr *syncthingv1.Instance, volumes []corev1.Volume) map[string]corev1.VolumeMount {
 
 	mounts := map[string]corev1.VolumeMount{}
 	for _, volume := range volumes {
@@ -143,7 +143,7 @@ func generateVolumeMountConfigs(syncthing_cr *syncthingv1alpha1.Instance, volume
 }
 
 // TLS config for Syncthing
-func generateTlsSecret(syncthing_cr *syncthingv1alpha1.Instance) *corev1.Secret {
+func generateTlsSecret(syncthing_cr *syncthingv1.Instance) *corev1.Secret {
 	secretLabels := commonSyncthingLabels(syncthing_cr.Name)
 	secretLabels[syncthingclient.StClientConfigLabel] = "plain"
 	secretLabels["cert.syncthing.buc.sh"] = "pem"
@@ -168,7 +168,7 @@ func generateTlsSecret(syncthing_cr *syncthingv1alpha1.Instance) *corev1.Secret 
 }
 
 // Base Deployment Object
-func generateDeployment(syncthing_cr *syncthingv1alpha1.Instance) *appsv1.Deployment {
+func generateDeployment(syncthing_cr *syncthingv1.Instance) *appsv1.Deployment {
 	labels := commonSyncthingLabels(syncthing_cr.Name)
 	image := syncthing_cr.Spec.ImageName
 	tag := syncthing_cr.Spec.Tag
@@ -247,7 +247,7 @@ func generateDeployment(syncthing_cr *syncthingv1alpha1.Instance) *appsv1.Deploy
 
 }
 
-func generateClusterService(syncthing_cr *syncthingv1alpha1.Instance) *corev1.Service {
+func generateClusterService(syncthing_cr *syncthingv1.Instance) *corev1.Service {
 	return &corev1.Service{
 		ObjectMeta: metav1.ObjectMeta{
 			Name:      syncthing_cr.Name + "-web",
@@ -271,7 +271,7 @@ func generateClusterService(syncthing_cr *syncthingv1alpha1.Instance) *corev1.Se
 	}
 }
 
-func generateNodeportService(syncthing_cr *syncthingv1alpha1.Instance) *corev1.Service {
+func generateNodeportService(syncthing_cr *syncthingv1.Instance) *corev1.Service {
 	return &corev1.Service{
 		ObjectMeta: metav1.ObjectMeta{
 			Name:      syncthing_cr.Name + "-nodeport",

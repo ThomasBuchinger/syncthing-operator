@@ -1,0 +1,55 @@
+apiVersion: operators.coreos.com/v1alpha1
+kind: ClusterServiceVersion
+metadata:
+  annotations:
+    alm-examples: '[]'
+    capabilities: Basic Install
+  name: syncthing-operator.v0.0.0
+  namespace: placeholder
+spec:
+  apiservicedefinitions: {}
+  customresourcedefinitions:
+    owned:
+    - description: Device is the Schema for the devices API
+      displayName: Device
+      kind: Device
+      name: devices.syncthing.buc.sh
+      version: v1alpha1
+    - description: Folder is the Schema for the folders API
+      displayName: Folder
+      kind: Folder
+      name: folders.syncthing.buc.sh
+      version: v1alpha1
+    - description: Instance is the Schema for the instances API
+      displayName: Instance
+      kind: Instance
+      name: instances.syncthing.buc.sh
+      version: v1alpha1
+  description: Run Syncthing on Kubernetes or automate an existing Syncthing instance
+  displayName: Syncthing Operator
+  icon:
+  - base64data: ""
+    mediatype: ""
+  install:
+    spec:
+      deployments: null
+    strategy: ""
+  installModes:
+  - supported: false
+    type: OwnNamespace
+  - supported: false
+    type: SingleNamespace
+  - supported: false
+    type: MultiNamespace
+  - supported: true
+    type: AllNamespaces
+  keywords:
+  - syncthing
+  - filesharing
+  links:
+  - name: Syncthing Operator
+    url: https://syncthing-operator.domain
+  maturity: alpha
+  provider:
+    name: '?'
+  version: 0.0.0

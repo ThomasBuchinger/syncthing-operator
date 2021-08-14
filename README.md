@@ -3,12 +3,13 @@ Kubernetes Operator for [syncthing](https://syncthing.net/)
 
 
 # Features
-**Persistent configuration**: Manual configuration
+**Respect existing configuration**: The operator only manages what it is told to. Device/folder unknown? Leave it alone. Configuration 
+setting not supported by the operator? Use the WebUI. Config persists through restarts, thanks to it's own persistent volume
 
-We respect manual configurations. The configuration directory is stored on a persistent volume and the 
-operator only configures what it is told to using the REST API.
+**Multiple data volumes**: Want to store your pictures on a different device than the rest? You can mount volumes from different sources to
+the same syncthing instance
 
-**Multiple data voumes**: Want to store your pictures on a different device than the rest?
+**Bring your own syncthing**: Already got syncthing running? Just configure the API endpoint and manage the existing instance through the operator
 
 # Usage
 ## Installation

@@ -28,7 +28,7 @@ import (
 	"sigs.k8s.io/controller-runtime/pkg/client"
 	"sigs.k8s.io/controller-runtime/pkg/log"
 
-	syncthingv1alpha1 "github.com/thomasbuchinger/syncthing-operator/api/v1alpha1"
+	syncthingv1 "github.com/thomasbuchinger/syncthing-operator/api/v1"
 	syncthingclient "github.com/thomasbuchinger/syncthing-operator/pkg/syncthing-client"
 )
 
@@ -58,7 +58,7 @@ func (r *DeviceReconciler) Reconcile(ctx context.Context, req ctrl.Request) (ctr
 	deleteDeviceFromSyncthing := false
 
 	// === Get the Device CR ===
-	deviceCr := &syncthingv1alpha1.Device{}
+	deviceCr := &syncthingv1.Device{}
 	err := r.Get(ctx, types.NamespacedName{Namespace: req.Namespace, Name: req.Name}, deviceCr)
 	if err != nil {
 		if errors.IsNotFound(err) {
@@ -161,7 +161,7 @@ func (r *DeviceReconciler) ReconcileDeletion(req ctrl.Request, config syncthingc
 	return ctrl.Result{}, nil
 }
 
-func generateStDeviceConfig(deviceCr syncthingv1alpha1.Device) syncthingclient.DeviceElement {
+func generateStDeviceConfig(deviceCr syncthingv1.Device) syncthingclient.DeviceElement {
 	return syncthingclient.DeviceElement{
 		DeviceId:                 deviceCr.Spec.DeviceId,
 		Name:                     deviceCr.Name,
@@ -177,6 +177,6 @@ func generateStDeviceConfig(deviceCr syncthingv1alpha1.Device) syncthingclient.D
 // SetupWithManager sets up the controller with the Manager.
 func (r *DeviceReconciler) SetupWithManager(mgr ctrl.Manager) error {
 	return ctrl.NewControllerManagedBy(mgr).
-		For(&syncthingv1alpha1.Device{}).
+		For(&syncthingv1.Device{}).
 		Complete(r)
 }

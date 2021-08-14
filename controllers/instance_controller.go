@@ -30,7 +30,7 @@ import (
 	"sigs.k8s.io/controller-runtime/pkg/log"
 
 	"github.com/go-logr/logr"
-	syncthingv1alpha1 "github.com/thomasbuchinger/syncthing-operator/api/v1alpha1"
+	syncthingv1 "github.com/thomasbuchinger/syncthing-operator/api/v1"
 	syncthingclient "github.com/thomasbuchinger/syncthing-operator/pkg/syncthing-client"
 
 	appsv1 "k8s.io/api/apps/v1"
@@ -70,7 +70,7 @@ func (r *InstanceReconciler) Reconcile(ctx context.Context, req ctrl.Request) (c
 	r.req = req
 
 	// Get the CustomResource
-	instanceCr := &syncthingv1alpha1.Instance{}
+	instanceCr := &syncthingv1.Instance{}
 	err := r.Get(ctx, types.NamespacedName{Namespace: req.Namespace, Name: req.Name}, instanceCr)
 	if err != nil {
 		if errors.IsNotFound(err) {
@@ -132,7 +132,7 @@ func (r *InstanceReconciler) Reconcile(ctx context.Context, req ctrl.Request) (c
 	return ctrl.Result{Requeue: true, RequeueAfter: 30 * time.Second}, nil
 }
 
-func (r *InstanceReconciler) ReconcileKubernetes(instanceCr *syncthingv1alpha1.Instance) (ctrl.Result, error) {
+func (r *InstanceReconciler) ReconcileKubernetes(instanceCr *syncthingv1.Instance) (ctrl.Result, error) {
 	// =====================================
 	// === Create necessary API opbjects ===
 	// =====================================
@@ -237,7 +237,7 @@ func (r *InstanceReconciler) ReconcileKubernetes(instanceCr *syncthingv1alpha1.I
 	return ctrl.Result{}, nil
 }
 
-func (r *InstanceReconciler) ReconcileNodeportservice(instanceCr *syncthingv1alpha1.Instance) (ctrl.Result, error) {
+func (r *InstanceReconciler) ReconcileNodeportservice(instanceCr *syncthingv1.Instance) (ctrl.Result, error) {
 
 	// === Ensure Service exists ===
 	nodeportService := generateNodeportService(instanceCr)
@@ -254,7 +254,7 @@ func (r *InstanceReconciler) ReconcileNodeportservice(instanceCr *syncthingv1alp
 	return ctrl.Result{}, nil
 }
 
-func (r *InstanceReconciler) ReconcileApplication(syncthing_cr *syncthingv1alpha1.Instance) (ctrl.Result, error) {
+func (r *InstanceReconciler) ReconcileApplication(syncthing_cr *syncthingv1.Instance) (ctrl.Result, error) {
 	var err error
 	r.StClient, err = syncthingclient.FromCr(syncthing_cr.Spec.Clientconfig, syncthing_cr.Namespace, r.Client, r.ctx)
 	if err != nil {
@@ -337,7 +337,7 @@ func (r *InstanceReconciler) ReconcileApplication(syncthing_cr *syncthingv1alpha
 // SetupWithManager sets up the controller with the Manager.
 func (r *InstanceReconciler) SetupWithManager(mgr ctrl.Manager) error {
 	return ctrl.NewControllerManagedBy(mgr).
-		For(&syncthingv1alpha1.Instance{}).
+		For(&syncthingv1.Instance{}).
 		Owns(&appsv1.Deployment{}).
 		Owns(&corev1.Service{}).
 		Owns(&corev1.Secret{}).
