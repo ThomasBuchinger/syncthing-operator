@@ -12,10 +12,13 @@ import (
 )
 
 func fillDefaultValues(i *syncthingv1.Instance) error {
+	// Not configureable via CRD
 	i.Spec.DataPath = "/var/syncthing/"
 	i.Spec.ConfigPath = "/etc/syncthing/"
 	i.Spec.ContainerName = "syncthing"
 	i.Spec.TlsConfigName = "tls-config"
+
+	// Set default values for CustomResource
 	if i.Spec.ImageName == "" {
 		i.Spec.ImageName = "docker.io/syncthing/syncthing"
 	}
@@ -25,7 +28,7 @@ func fillDefaultValues(i *syncthingv1.Instance) error {
 	if i.Spec.SyncPort == 0 {
 		i.Spec.SyncPort = 32000
 	}
-	default_volume := corev1.Volume{Name: "", VolumeSource: corev1.VolumeSource{}}
+	default_volume := corev1.Volume{Name: "", VolumeSource: corev1.VolumeSource{}} // same as golangs default-initialized Volume
 	if i.Spec.ConfigVolume == default_volume {
 		i.Spec.ConfigVolume = corev1.Volume{
 			Name: "config-root",
@@ -55,8 +58,9 @@ func fillDefaultValues(i *syncthingv1.Instance) error {
 	}
 	return nil
 }
+
 func commonSyncthingLabels(name string) map[string]string {
-	return map[string]string{"k8s-app": "syncthing", "syncthing_cr": name}
+	return map[string]string{"app.kubernetes.io/app": "syncthing", "syncthing.buc.sh/cr": name}
 }
 
 func getContainerIndexByName(list []corev1.Container, name string) int {
@@ -86,8 +90,8 @@ func getVolumeMountIndexByName(list []corev1.VolumeMount, name string) int {
 	return -1
 }
 
+// Mount the secret as a Volume in the deployment
 func generateTlsVolumeAndMount(syncthing_cr *syncthingv1.Instance, secret *corev1.Secret, deployment *appsv1.Deployment) *appsv1.Deployment {
-	// var permissions int32 = 0777
 	tlsVolume := corev1.Volume{
 		Name: syncthing_cr.Spec.TlsConfigName,
 		VolumeSource: corev1.VolumeSource{
@@ -109,20 +113,20 @@ func generateTlsVolumeAndMount(syncthing_cr *syncthingv1.Instance, secret *corev
 
 	deployment.Spec.Template.Spec.Volumes = append(deployment.Spec.Template.Spec.Volumes, tlsVolume)
 	for index := range deployment.Spec.Template.Spec.Containers {
-		if getVolumeMountIndexByName(deployment.Spec.Template.Spec.Containers[index].VolumeMounts, tlsVolume.Name) == -1 {
+		if -1 == getVolumeMountIndexByName(deployment.Spec.Template.Spec.Containers[index].VolumeMounts, tlsVolume.Name) {
 			deployment.Spec.Template.Spec.Containers[index].VolumeMounts = append(deployment.Spec.Template.Spec.Containers[index].VolumeMounts, keyMount, certMount)
 		}
 	}
 	for index := range deployment.Spec.Template.Spec.InitContainers {
-		if getVolumeMountIndexByName(deployment.Spec.Template.Spec.InitContainers[index].VolumeMounts, tlsVolume.Name) == -1 {
+		if -1 == getVolumeMountIndexByName(deployment.Spec.Template.Spec.InitContainers[index].VolumeMounts, tlsVolume.Name) {
 			deployment.Spec.Template.Spec.InitContainers[index].VolumeMounts = append(deployment.Spec.Template.Spec.InitContainers[index].VolumeMounts, keyMount, certMount)
 		}
 	}
 	return deployment
 }
 
+// MountConfigs for all persistent volumes
 func generateVolumeMountConfigs(syncthing_cr *syncthingv1.Instance, volumes []corev1.Volume) map[string]corev1.VolumeMount {
-
 	mounts := map[string]corev1.VolumeMount{}
 	for _, volume := range volumes {
 		templateMount := corev1.VolumeMount{
@@ -142,12 +146,11 @@ func generateVolumeMountConfigs(syncthing_cr *syncthingv1.Instance, volumes []co
 	return mounts
 }
 
-// TLS config for Syncthing
+// TLS certificates for sync protocol
 func generateTlsSecret(syncthing_cr *syncthingv1.Instance) *corev1.Secret {
 	secretLabels := commonSyncthingLabels(syncthing_cr.Name)
 	secretLabels[syncthingclient.StClientConfigLabel] = "plain"
-	secretLabels["cert.syncthing.buc.sh"] = "pem"
-	secretLabels["key.syncthing.buc.sh"] = "pem"
+	secretLabels[syncthingclient.StClientSyncTlsLabel] = "pem"
 
 	secret := &corev1.Secret{
 		ObjectMeta: metav1.ObjectMeta{
@@ -157,6 +160,7 @@ func generateTlsSecret(syncthing_cr *syncthingv1.Instance) *corev1.Secret {
 		},
 		Type: corev1.SecretTypeTLS,
 		Data: map[string][]byte{
+			// TODO: make this dependent on the actual client config
 			"url":     []byte(syncthing_cr.Spec.Clientconfig.ApiUrl),
 			"apikey":  []byte(syncthing_cr.Spec.Clientconfig.ApiKey),
 			"tls.key": []byte(syncthing_cr.Spec.TlsKey),
@@ -247,6 +251,7 @@ func generateDeployment(syncthing_cr *syncthingv1.Instance) *appsv1.Deployment {
 
 }
 
+// Generate a ClusterIP Service, but leave exposing syncthing to the user
 func generateClusterService(syncthing_cr *syncthingv1.Instance) *corev1.Service {
 	return &corev1.Service{
 		ObjectMeta: metav1.ObjectMeta{
@@ -271,6 +276,7 @@ func generateClusterService(syncthing_cr *syncthingv1.Instance) *corev1.Service 
 	}
 }
 
+// Optional: Generate a NodePort to expose syncthing to the outside world
 func generateNodeportService(syncthing_cr *syncthingv1.Instance) *corev1.Service {
 	return &corev1.Service{
 		ObjectMeta: metav1.ObjectMeta{

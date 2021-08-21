@@ -16,12 +16,19 @@ import (
 	"sigs.k8s.io/controller-runtime/pkg/log"
 )
 
+const StClientConfigLabel string = "config.syncthing.buc.sh"
+const StClientSyncTlsLabel = "sync.syncthing.buc.sh"
+const StClientHttpsLabel = "https.syncthing.buc.sh"
+
+// Optional in CustomResource definition of synyncthing instance. Shared by all CRDs
 type StClientConfig struct {
 	//+kubebuilder:default:="http://syncthing.svc.cluster.local:8384"
 	ApiUrl string `json:"url"`
 	//+kubebuilder:default:=""
 	ApiKey string `json:"apikey"`
 }
+
+// Syncthing Client Object
 type StClient struct {
 	BaseUrl    url.URL
 	ApiKey     string
@@ -29,49 +36,57 @@ type StClient struct {
 	logger     logr.Logger
 }
 
-const StClientConfigLabel string = "config.syncthing.buc.sh"
-
-// func SetupSyncthingClient() *StClient {
-// 	c := new(StClient)
-// 	c.BaseUrl = GetSyncthingDefaultUrl()
-// 	c.ApiKey = ""
-// 	c.HttpClient = *http.DefaultClient
-// 	return c
-// }
-
+// Create a Client from either the given CustomResource or search the given namespace
 func FromCr(cr StClientConfig, ns string, client interface{ client.Client }, ctx context.Context) (*StClient, error) {
 	url_string, key := "http://syncthing.svc.cluster.local:8384", ""
 	logger := log.FromContext(ctx)
-
-	// Look for a Config in the Namespace
-	ns_url, ns_key, err := searchNamespace(ns, client, ctx)
-	if err != nil {
-		logger.V(1).Info("Error quering Secret: %s", err.Error())
-	} else {
-		// If both values are empty, either no secret was found or the secret did not have matching keys
-		if ns_url != "" {
-			url_string = ns_url
-		}
-		if ns_key != "" {
-			key = ns_key
-		}
-	}
+	config_valid := struct{ Url, Key bool }{Url: false, Key: false}
 
 	// CustomResource Config has highest precedence
 	if cr.ApiUrl != "" {
 		url_string = cr.ApiUrl
+		config_valid.Url = true
 	}
 	if cr.ApiKey != "" {
 		key = cr.ApiKey
+		config_valid.Key = true
+	}
+
+	// Next look for a Config in the Namespace
+	if !(config_valid.Url && config_valid.Key) {
+		logger.V(1).Info("Searching for connection secret in namespace: " + ns)
+		ns_url, ns_key, err := searchNamespace(ns, client, ctx)
+		if err != nil {
+			logger.V(1).Info("Error quering Secret: %s", err.Error())
+		} else {
+			// If both values are empty, either no secret was found or the secret did not have matching keys
+			if ns_url != "" && !config_valid.Url {
+				url_string = ns_url
+				config_valid.Url = true
+			}
+			if ns_key != "" && !config_valid.Key {
+				key = ns_key
+				config_valid.Key = true
+			}
+		}
+	}
+
+	// Use default value for URL
+	if !config_valid.Url {
+		url_string = "http://syncthing.svc.cluster.local:8384"
+		config_valid.Url = true
 	}
 
 	// Build StClient
+	if !(config_valid.Url && len(url_string) != 0) {
+		return nil, fmt.Errorf("API URL is empty")
+	}
+	if !(config_valid.Key && len(key) == 0) {
+		return nil, fmt.Errorf("no API key found")
+	}
 	apiurl, err := url.Parse(url_string)
 	if err != nil {
 		return nil, fmt.Errorf("invalid URL: %s", err.Error())
-	}
-	if len(key) == 0 {
-		return nil, fmt.Errorf("no API key found")
 	}
 
 	c := new(StClient)
@@ -82,6 +97,7 @@ func FromCr(cr StClientConfig, ns string, client interface{ client.Client }, ctx
 	return c, nil
 }
 
+// search namespace for a secret containing an API endpoint
 func searchNamespace(ns string, c interface{ client.Client }, ctx context.Context) (string, string, error) {
 	secrets := &corev1.SecretList{}
 	err := c.List(ctx, secrets, client.InNamespace(ns), client.HasLabels{StClientConfigLabel})
@@ -100,6 +116,7 @@ func searchNamespace(ns string, c interface{ client.Client }, ctx context.Contex
 	return apiurl, apikey, nil
 }
 
+// helper method for http requests
 func (c *StClient) newRequestTemplate(method, path string, body interface{}) (*http.Request, error) {
 	rel := &url.URL{Path: path}
 	u := c.BaseUrl.ResolveReference(rel)
@@ -122,6 +139,8 @@ func (c *StClient) newRequestTemplate(method, path string, body interface{}) (*h
 	req.Header.Set("X-API-Key", c.ApiKey)
 	return req, nil
 }
+
+// helper method for http requests
 func (c *StClient) do(req *http.Request, v interface{}) (*http.Response, error) {
 	resp, err := c.HttpClient.Do(req)
 	if err != nil {

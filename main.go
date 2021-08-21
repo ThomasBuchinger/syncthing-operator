@@ -74,7 +74,7 @@ func main() {
 		os.Exit(1)
 	}
 
-	fmt.Println("Use NS " + namespace)
+	setupLog.Info("Using namespace: " + namespace)
 	period := time.Duration(syncPeriod) * time.Minute
 	mgr, err := ctrl.NewManager(ctrl.GetConfigOrDie(), ctrl.Options{
 		Scheme:                 scheme,

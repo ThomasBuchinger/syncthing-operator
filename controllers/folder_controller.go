@@ -32,7 +32,6 @@ import (
 	syncthingclient "github.com/thomasbuchinger/syncthing-operator/pkg/syncthing-client"
 )
 
-// FolderReconciler reconciles a Folder object
 type FolderReconciler struct {
 	client.Client
 	StClient *syncthingclient.StClient
@@ -43,16 +42,6 @@ type FolderReconciler struct {
 //+kubebuilder:rbac:groups=syncthing.buc.sh,namespace=default,resources=folders/status,verbs=get;update;patch
 //+kubebuilder:rbac:groups=syncthing.buc.sh,namespace=default,resources=folders/finalizers,verbs=update
 //+kubebuilder:rbac:groups=core,namespace=default,resources=secrets,verbs=get;list;
-
-// Reconcile is part of the main kubernetes reconciliation loop which aims to
-// move the current state of the cluster closer to the desired state.
-// TODO(user): Modify the Reconcile function to compare the state specified by
-// the Folder object against the actual cluster state, and then
-// perform operations to make the cluster state reflect the state specified by
-// the user.
-//
-// For more details, check Reconcile and its Result here:
-// - https://pkg.go.dev/sigs.k8s.io/controller-runtime@v0.8.3/pkg/reconcile
 func (r *FolderReconciler) Reconcile(ctx context.Context, req ctrl.Request) (ctrl.Result, error) {
 	logger := log.FromContext(ctx)
 	deleteFolderFromSyncthing := false
@@ -62,6 +51,8 @@ func (r *FolderReconciler) Reconcile(ctx context.Context, req ctrl.Request) (ctr
 	err := r.Get(ctx, types.NamespacedName{Namespace: req.Namespace, Name: req.Name}, folderCr)
 	if err != nil {
 		if errors.IsNotFound(err) {
+			// The CustomResource is deleted, but we need to make sure it is deleted in syncthing as well
+			// Defer calling ReconcileDeletion() until we established a connection to syncthing
 			deleteFolderFromSyncthing = true
 		} else {
 			logger.Error(err, "Something went terrible wrong!")
@@ -90,7 +81,7 @@ func (r *FolderReconciler) Reconcile(ctx context.Context, req ctrl.Request) (ctr
 	}
 
 	if deleteFolderFromSyncthing {
-		logger.Info("Device Resource deleted. Configuring Syncthing...")
+		logger.Info("Folder Resource deleted. Configuring Syncthing...")
 		r.StClient.DeleteFolder(req.Name)
 		return ctrl.Result{}, nil
 	}
@@ -135,20 +126,6 @@ func (r *FolderReconciler) Reconcile(ctx context.Context, req ctrl.Request) (ctr
 		changed = true
 	}
 
-	// === Check FS Type ===
-	if folder.FilesystemType != folderCr.Spec.FilesystemType {
-		logger.Info("Setting FS Type: " + folderCr.Spec.FilesystemType)
-		folder.FilesystemType = folderCr.Spec.FilesystemType
-		changed = true
-	}
-
-	// === Check IgnoreDelete Flag ===
-	if folder.IgnoreDelete != folderCr.Spec.IgnoreDelete {
-		logger.Info("Setting IgnoreDelete Flag: " + fmt.Sprint(folderCr.Spec.IgnoreDelete))
-		folder.IgnoreDelete = folderCr.Spec.IgnoreDelete
-		changed = true
-	}
-
 	// === Check IgnorePermisions Flag ===
 	if folder.IgnorePerms != folderCr.Spec.IgnorePerms {
 		logger.Info("Setting IgnorePermissions Flag: " + fmt.Sprint(folderCr.Spec.IgnorePerms))
@@ -188,6 +165,7 @@ func (r *FolderReconciler) Reconcile(ctx context.Context, req ctrl.Request) (ctr
 }
 
 func generateStFolderConfig(folderCr syncthingv1.Folder) syncthingclient.FolderElement {
+	// Defaults for settings not supported by the operator
 	return syncthingclient.FolderElement{
 		Id:    folderCr.Name,
 		Label: folderCr.Spec.Label,
@@ -208,11 +186,8 @@ func fillFolderDefaults(folderCr *syncthingv1.Folder) {
 	if folderCr.Spec.Path == "" {
 		folderCr.Spec.Path = "/var/syncthing/" + folderCr.Name
 	}
-	if folderCr.Spec.FilesystemType == "" {
-		folderCr.Spec.FilesystemType = "basic"
-	}
 	if folderCr.Spec.Type == "" {
-		folderCr.Spec.Type = "send-receive"
+		folderCr.Spec.Type = "sendreceive"
 	}
 	if folderCr.Spec.Order == "" {
 		folderCr.Spec.Order = "random"

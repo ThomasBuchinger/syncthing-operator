@@ -66,7 +66,7 @@ type InstanceSpec struct {
 	//+kubebuilder:default:=true
 	EnableConfiguration bool `json:"enable_config,omitempty"`
 	// Allow syncthing to send anonymous usage data
-	//+kubebuilder:devault:=false
+	//+kubebuilder:default:=false
 	AllowUsageReport bool `json:"allow_usage_report,omitempty"`
 	// Limit Upload Speed.
 	// Measured in bytes, rather than bits

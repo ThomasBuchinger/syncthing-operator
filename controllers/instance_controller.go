@@ -37,7 +37,6 @@ import (
 	corev1 "k8s.io/api/core/v1"
 )
 
-// InstanceReconciler reconciles a Instance object
 type InstanceReconciler struct {
 	client.Client
 	StClient *syncthingclient.StClient
@@ -54,22 +53,12 @@ type InstanceReconciler struct {
 //+kubebuilder:rbac:groups=core,namespace=default,resources=pods,verbs=get;list;
 //+kubebuilder:rbac:groups=core,namespace=default,resources=services,verbs=get;list;
 //+kubebuilder:rbac:groups=core,namespace=default,resources=secrets,verbs=get;list;
-
-// Reconcile is part of the main kubernetes reconciliation loop which aims to
-// move the current state of the cluster closer to the desired state.
-// TODO(user): Modify the Reconcile function to compare the state specified by
-// the Instance object against the actual cluster state, and then
-// perform operations to make the cluster state reflect the state specified by
-// the user.
-//
-// For more details, check Reconcile and its Result here:
-// - https://pkg.go.dev/sigs.k8s.io/controller-runtime@v0.8.3/pkg/reconcile
 func (r *InstanceReconciler) Reconcile(ctx context.Context, req ctrl.Request) (ctrl.Result, error) {
 	r.logger = log.FromContext(ctx)
 	r.ctx = ctx
 	r.req = req
 
-	// Get the CustomResource
+	// === Get the CustomResource ===
 	instanceCr := &syncthingv1.Instance{}
 	err := r.Get(ctx, types.NamespacedName{Namespace: req.Namespace, Name: req.Name}, instanceCr)
 	if err != nil {
@@ -83,13 +72,15 @@ func (r *InstanceReconciler) Reconcile(ctx context.Context, req ctrl.Request) (c
 	}
 	fillDefaultValues(instanceCr)
 
+	// === Reconcile Syncthing deployment ===
 	if instanceCr.Spec.EnableInstance {
 		result, err := r.ReconcileKubernetes(instanceCr)
-		if err != nil || result.Requeue {
+		if err != nil || result.Requeue { // Return from main reconcile-loop, if ReconcileKubernetes() requests a Requeue/error
 			return result, err
 		}
 		r.logger.V(1).Info("Syncthing Container deployed!")
 	}
+	// === Reconcile Nodeport/Ingress to syncthing ===
 	if instanceCr.Spec.EnableInstance && instanceCr.Spec.EnableNodeport {
 		result, err := r.ReconcileNodeportservice(instanceCr)
 		if err != nil || result.Requeue {
@@ -97,6 +88,7 @@ func (r *InstanceReconciler) Reconcile(ctx context.Context, req ctrl.Request) (c
 		}
 		r.logger.V(1).Info("Syncthing Nodeports configured!")
 	}
+	// === Reconcile application settings ===
 	if instanceCr.Spec.EnableConfiguration {
 		result, err := r.ReconcileApplication(instanceCr)
 		if err != nil || result.Requeue {
@@ -129,7 +121,7 @@ func (r *InstanceReconciler) Reconcile(ctx context.Context, req ctrl.Request) (c
 	// 		return ctrl.Result{}, err
 	// 	}
 	// }
-	return ctrl.Result{Requeue: true, RequeueAfter: 30 * time.Second}, nil
+	return ctrl.Result{}, nil
 }
 
 func (r *InstanceReconciler) ReconcileKubernetes(instanceCr *syncthingv1.Instance) (ctrl.Result, error) {
@@ -137,58 +129,40 @@ func (r *InstanceReconciler) ReconcileKubernetes(instanceCr *syncthingv1.Instanc
 	// === Create necessary API opbjects ===
 	// =====================================
 
-	// === Look for the referenced TLS Secret ===
+	// === Look for the referenced TLS Secret (the one for the sync, not HTTPS) ===
 	secret := generateTlsSecret(instanceCr)
 	ctrl.SetControllerReference(instanceCr, secret, r.Scheme)
-	obj, createReturn, err := GetOrCreate(r, instanceCr.GetNamespace(), secret)
-	if createReturn == Created {
-		r.logger.Info("Created Secret: " + obj.GetName())
-		return ctrl.Result{Requeue: true}, nil
+	createReturn, obj, result, err := GetOrCreateObject(r, instanceCr.GetNamespace(), secret)
+	if createReturn.IsOneOf(Created, GetError, CreateError) {
+		return result, err
 	}
-	if createReturn == CreateError || createReturn == GetError {
-		r.logger.Error(err, "Failed to create Secret for TLS config")
-		return ctrl.Result{Requeue: true, RequeueAfter: 1 * time.Minute}, err
-	}
-	r.logger.V(1).Info("Using Secret: " + obj.GetName())
-	foundSecret := obj.(*corev1.Secret)
+	foundSecret := obj.(*corev1.Secret) // type-cast
 
 	// === Ensure Deployment exists ===
 	deployment := generateDeployment(instanceCr)
 	ctrl.SetControllerReference(instanceCr, deployment, r.Scheme)
-	obj, createReturn, err = GetOrCreate(r, instanceCr.GetNamespace(), deployment)
-	if createReturn == Created {
-		r.logger.Info("Created Deployment: " + obj.GetName())
-		return ctrl.Result{Requeue: true}, nil
+	createReturn, obj, result, err = GetOrCreateObject(r, instanceCr.GetNamespace(), deployment)
+	if createReturn.IsOneOf(Created, GetError, CreateError) {
+		return result, err
 	}
-	if createReturn == CreateError || createReturn == GetError {
-		r.logger.Error(err, "Failed to create Deployment")
-		return ctrl.Result{Requeue: true, RequeueAfter: 1 * time.Minute}, err
-	}
-	r.logger.V(1).Info("Using Deployment: " + obj.GetName())
 	foundDeployment := obj.(*appsv1.Deployment)
 
 	// === Ensure Service exists ===
 	clusterService := generateClusterService(instanceCr)
 	ctrl.SetControllerReference(instanceCr, clusterService, r.Scheme)
-	obj, createReturn, err = GetOrCreate(r, r.req.Namespace, clusterService)
-	if createReturn == Created {
-		r.logger.Info("Created Cluster Service: " + obj.GetName())
-		return ctrl.Result{Requeue: true}, nil
+	createReturn, _, result, err = GetOrCreateObject(r, instanceCr.GetNamespace(), clusterService)
+	if createReturn.IsOneOf(Created, GetError, CreateError) {
+		return result, err
 	}
-	if createReturn == CreateError || createReturn == GetError {
-		r.logger.Error(err, "Failed to create Cluster Service")
-		return ctrl.Result{Requeue: true, RequeueAfter: 1 * time.Minute}, nil
-	}
-	r.logger.V(1).Info("Using Service: " + obj.GetName())
 
-	// =============================================
-	// === Apply configuration to the API object ===
-	// =============================================
-	changed := false
+	// ================================================
+	// === Apply configuration to Deployment object ===
+	// ================================================
 	container_index := getContainerIndexByName(foundDeployment.Spec.Template.Spec.Containers, instanceCr.Spec.ContainerName)
 	if container_index == -1 {
 		r.logger.Error(nil, "Unable to find syncthing Container in Deployment. Replacing Containers section...")
 		foundDeployment.Spec.Template.Spec.Containers = deployment.Spec.Template.Spec.Containers
+		return UpdateObject(r, foundDeployment)
 	}
 
 	// === Ensure the correct image is used ===
@@ -197,7 +171,7 @@ func (r *InstanceReconciler) ReconcileKubernetes(instanceCr *syncthingv1.Instanc
 	if current_image != container_image {
 		r.logger.Info("Updating Image from " + current_image + " to " + container_image)
 		foundDeployment.Spec.Template.Spec.Containers[container_index].Image = container_image
-		changed = true
+		return UpdateObject(r, foundDeployment)
 	}
 
 	// === Create Volume from TlsSecret ===
@@ -205,12 +179,14 @@ func (r *InstanceReconciler) ReconcileKubernetes(instanceCr *syncthingv1.Instanc
 		getVolumeMountIndexByName(foundDeployment.Spec.Template.Spec.Containers[container_index].VolumeMounts, instanceCr.Spec.TlsConfigName) == -1 {
 		r.logger.Info("Adding TLS configuration to deployment...")
 		foundDeployment = generateTlsVolumeAndMount(instanceCr, foundSecret, foundDeployment)
+		return UpdateObject(r, foundDeployment)
 	}
 
 	// === Ensure all Volumes are present ===
-	persistentVolumes := []corev1.Volume{instanceCr.Spec.ConfigVolume, instanceCr.Spec.DataRoot}
+	persistentVolumes := []corev1.Volume{instanceCr.Spec.ConfigVolume, instanceCr.Spec.DataRoot} // ConfigVolume and DataRoot are mandatory
 	persistentVolumes = append(persistentVolumes, instanceCr.Spec.AdditionalDataVolumes...)
 	mountConfigs := generateVolumeMountConfigs(instanceCr, persistentVolumes)
+	volumes_changed := false
 	for _, volume := range persistentVolumes {
 		if -1 == getVolumeIndexByName(foundDeployment.Spec.Template.Spec.Volumes, volume.Name) {
 			r.logger.Info("Adding Volume: " + volume.Name)
@@ -218,40 +194,23 @@ func (r *InstanceReconciler) ReconcileKubernetes(instanceCr *syncthingv1.Instanc
 			if getVolumeMountIndexByName(foundDeployment.Spec.Template.Spec.Containers[container_index].VolumeMounts, volume.Name) == -1 {
 				foundDeployment.Spec.Template.Spec.Containers[container_index].VolumeMounts = append(foundDeployment.Spec.Template.Spec.Containers[container_index].VolumeMounts, mountConfigs[volume.Name])
 			}
-			changed = true
+			volumes_changed = true
 		}
 	}
-
-	// === Update Deployment
-
-	if changed {
-		r.logger.Info("Updating Deployment...", "deployment", foundDeployment)
-		err = r.Update(r.ctx, foundDeployment)
-		if err != nil {
-			r.logger.Error(err, "Failed to update Deployment: "+foundDeployment.Name)
-			return ctrl.Result{Requeue: true, RequeueAfter: 1 * time.Minute}, err
-		}
-		return ctrl.Result{Requeue: true}, nil
+	if volumes_changed {
+		return UpdateObject(r, foundDeployment)
 	}
 
+	// === Done ===
 	return ctrl.Result{}, nil
 }
 
 func (r *InstanceReconciler) ReconcileNodeportservice(instanceCr *syncthingv1.Instance) (ctrl.Result, error) {
-
-	// === Ensure Service exists ===
+	// === Ensure NodeportService exists ===
 	nodeportService := generateNodeportService(instanceCr)
 	ctrl.SetControllerReference(instanceCr, nodeportService, r.Scheme)
-	obj, createReturn, err := GetOrCreate(r, instanceCr.GetNamespace(), nodeportService)
-	if createReturn == Created {
-		r.logger.Info("Created Nodeport Service: " + obj.GetName())
-		return ctrl.Result{Requeue: true}, nil
-	}
-	if createReturn == CreateError || createReturn == GetError {
-		r.logger.Error(err, "Failed to create Nodeport Service")
-		return ctrl.Result{Requeue: true, RequeueAfter: 1 * time.Minute}, nil
-	}
-	return ctrl.Result{}, nil
+	_, _, result, err := GetOrCreateObject(r, instanceCr.GetNamespace(), nodeportService)
+	return result, err
 }
 
 func (r *InstanceReconciler) ReconcileApplication(syncthing_cr *syncthingv1.Instance) (ctrl.Result, error) {

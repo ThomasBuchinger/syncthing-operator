@@ -11,6 +11,7 @@ const (
 	DenyUsageReport  UseageReport = -1
 )
 
+// === Start Syncthing API response mappings ===
 type StConfig struct {
 	Gui     GuiElement
 	Options OptionsElement
@@ -43,6 +44,8 @@ type DeviceReference struct {
 	DeviceId, IntroducedBy, EncryptionPassword string
 }
 
+// === End Syncthing API response mappings ===
+
 func (c StClient) GetDeviceIndexById(list []DeviceElement, id string) int {
 	for i, device := range list {
 		if device.DeviceId == id {
@@ -60,6 +63,7 @@ func (c StClient) GetFolderIndexById(list []FolderElement, id string) int {
 	return -1
 }
 
+// Connection Check
 func (c StClient) Ping() (bool, string) {
 	pingReq, _ := c.newRequestTemplate("GET", "/rest/system/ping", nil)
 	_, err := c.do(pingReq, nil)
@@ -71,6 +75,8 @@ func (c StClient) Ping() (bool, string) {
 	return true, "Success"
 
 }
+
+// Get a Config Dump
 func (c StClient) GetConfig() (StConfig, error) {
 	config := StConfig{}
 	request, _ := c.newRequestTemplate("GET", "/rest/config", nil)
@@ -78,6 +84,7 @@ func (c StClient) GetConfig() (StConfig, error) {
 	return config, err
 }
 
+// === Start config options ===
 func (c StClient) SendUsageStatistics(sendIt UseageReport) error {
 	value := struct {
 		UrAccepted int
@@ -144,6 +151,8 @@ func (c StClient) SetAuth(enabled bool, username string, password string) error 
 		return errors.New("Syncthing returned: " + response.Status)
 	}
 }
+
+// === End config options ===
 
 func (c StClient) ReplaceDevice(dev DeviceElement) error {
 	req, err := c.newRequestTemplate("PUT", "/rest/config/devices/"+dev.DeviceId, dev)

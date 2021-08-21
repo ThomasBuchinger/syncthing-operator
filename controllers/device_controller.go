@@ -32,7 +32,6 @@ import (
 	syncthingclient "github.com/thomasbuchinger/syncthing-operator/pkg/syncthing-client"
 )
 
-// DeviceReconciler reconciles a Device object
 type DeviceReconciler struct {
 	client.Client
 	StClient *syncthingclient.StClient
@@ -43,16 +42,6 @@ type DeviceReconciler struct {
 //+kubebuilder:rbac:groups=syncthing.buc.sh,namespace=default,resources=devices/status,verbs=get;update;patch
 //+kubebuilder:rbac:groups=syncthing.buc.sh,namespace=default,resources=devices/finalizers,verbs=update
 //+kubebuilder:rbac:groups=core,namespace=default,resources=secrets,verbs=get;list;
-
-// Reconcile is part of the main kubernetes reconciliation loop which aims to
-// move the current state of the cluster closer to the desired state.
-// TODO(user): Modify the Reconcile function to compare the state specified by
-// the Device object against the actual cluster state, and then
-// perform operations to make the cluster state reflect the state specified by
-// the user.
-//
-// For more details, check Reconcile and its Result here:
-// - https://pkg.go.dev/sigs.k8s.io/controller-runtime@v0.8.3/pkg/reconcile
 func (r *DeviceReconciler) Reconcile(ctx context.Context, req ctrl.Request) (ctrl.Result, error) {
 	logger := log.FromContext(ctx)
 	deleteDeviceFromSyncthing := false
@@ -62,9 +51,11 @@ func (r *DeviceReconciler) Reconcile(ctx context.Context, req ctrl.Request) (ctr
 	err := r.Get(ctx, types.NamespacedName{Namespace: req.Namespace, Name: req.Name}, deviceCr)
 	if err != nil {
 		if errors.IsNotFound(err) {
-			deleteDeviceFromSyncthing = true // defer deletion until we fetched the current syncthing config
+			// The CustomResource is deleted, but we need to make sure it is deleted in syncthing as well
+			// Defer calling ReconcileDeletion() until we established a connection to syncthing
+			deleteDeviceFromSyncthing = true
 		} else {
-			logger.Error(err, "Something went terrible wrong!")
+			logger.Error(err, "Error fetching Device CustomResource: ")
 			return ctrl.Result{}, err
 		}
 	}
@@ -89,12 +80,13 @@ func (r *DeviceReconciler) Reconcile(ctx context.Context, req ctrl.Request) (ctr
 		return ctrl.Result{}, err
 	}
 
+	// === Delete Device from Syncthing ===
 	if deleteDeviceFromSyncthing {
-		logger.Info("Device Resource deleted. Configuring Syncthing...")
-		return r.ReconcileDeletion(req, config)
+		logger.Info("Device Resource deleted. Delete device in Syncthing...")
+		return r.ReconcileDeletion(req, config) // End of the Branch
 	}
 
-	// === check if device is present ===
+	// === Check if device is present ===
 	deviceIndex := r.StClient.GetDeviceIndexById(config.Devices, deviceCr.Spec.DeviceId)
 	var device syncthingclient.DeviceElement
 	changed := false
@@ -105,7 +97,7 @@ func (r *DeviceReconciler) Reconcile(ctx context.Context, req ctrl.Request) (ctr
 		device = config.Devices[deviceIndex]
 	}
 
-	// === Check AutoAccept ===
+	// === Check Name ===
 	if device.Name != deviceCr.Name {
 		logger.Info("Setting Name to " + deviceCr.Name)
 		device.Name = deviceCr.Name
@@ -127,9 +119,10 @@ func (r *DeviceReconciler) Reconcile(ctx context.Context, req ctrl.Request) (ctr
 	// 	changed = true
 	// }
 
+	// === Update syncthing if needed ===
 	if !changed {
 		logger.Info("Device not changed: " + req.Name)
-		return ctrl.Result{Requeue: true, RequeueAfter: 10 * time.Minute}, nil
+		return ctrl.Result{Requeue: true, RequeueAfter: 10 * time.Minute}, nil // We are finished here. End Reconcile-Loop
 	}
 
 	logger.Info("Updating Device Configuration: " + deviceCr.Name)
@@ -146,23 +139,24 @@ func (r *DeviceReconciler) Reconcile(ctx context.Context, req ctrl.Request) (ctr
 
 func (r *DeviceReconciler) ReconcileDeletion(req ctrl.Request, config syncthingclient.StConfig) (ctrl.Result, error) {
 	logger := ctrl.Log
+	// Check if the device is still configured in syncthing
 	for _, dev := range config.Devices {
-		if dev.Name == req.Name {
+		if dev.Name == req.Name { // At this stage we lost the deviceID and we can only match my name
 			err := r.StClient.DeleteDevice(dev.DeviceId)
 			if err != nil {
+				logger.Info("Device deletion failed: " + req.Name)
 				return ctrl.Result{}, err
 			}
-
-			logger.Info("Device deleted usccessfully: " + req.Name)
+			logger.Info(fmt.Sprintf("Deleted device '%s' with ID '%s'", dev.Name, dev.DeviceId))
 			return ctrl.Result{}, nil
 		}
 	}
-	logger.Info("Deleted Resource '" + req.Name + "' was already deleted")
+	logger.V(1).Info("Deleted Device '" + req.Name + "' is already gone")
 	return ctrl.Result{}, nil
 }
 
 func generateStDeviceConfig(deviceCr syncthingv1.Device) syncthingclient.DeviceElement {
-	return syncthingclient.DeviceElement{
+	return syncthingclient.DeviceElement{ // Set defaults not supported by the operator
 		DeviceId:                 deviceCr.Spec.DeviceId,
 		Name:                     deviceCr.Name,
 		Compression:              "metadata",

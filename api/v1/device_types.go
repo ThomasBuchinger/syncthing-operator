@@ -21,7 +21,7 @@ import (
 	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
 )
 
-// DeviceSpec defines the desired state of Device
+// CRD Spec forSyncthing Device: /api/system/config/devices
 type DeviceSpec struct {
 	// Embed Syncthing API info into DeviceSpec.
 	// This allows the operator to control an external Syncthing instance
@@ -41,21 +41,16 @@ type DeviceSpec struct {
 	Untrusted string `json:"untrusted,omitempty"`
 
 	IgnoredFolders []string `json:"ignored_folders,omitempty"`
-	// MaxSendSpeed      resource.Quantity `json:"max_send_speed,omitempty"`
-	// MaxReceiveSpeed   resource.Quantity `json:"max_receive_speed,omitempty"`
 }
 
-// DeviceStatus defines the observed state of Device
 type DeviceStatus struct {
-	// INSERT ADDITIONAL STATUS FIELD - define observed state of cluster
-	// Important: Run "make" to regenerate code after modifying this file
+	// TODO: Add information from/rst/system/connections
 }
 
 //+kubebuilder:object:root=true
 //+kubebuilder:subresource:status
 //+kubebuilder:resource:scope=Namespaced
 
-// Device is the Schema for the devices API
 type Device struct {
 	metav1.TypeMeta   `json:",inline"`
 	metav1.ObjectMeta `json:"metadata,omitempty"`
@@ -66,7 +61,6 @@ type Device struct {
 
 //+kubebuilder:object:root=true
 
-// DeviceList contains a list of Device
 type DeviceList struct {
 	metav1.TypeMeta `json:",inline"`
 	metav1.ListMeta `json:"metadata,omitempty"`
