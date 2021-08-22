@@ -6,7 +6,7 @@ metadata:
     capabilities: Basic Install
     operators.operatorframework.io/builder: operator-sdk-v1.8.0+git
     operators.operatorframework.io/project_layout: go.kubebuilder.io/v3
-  name: syncthing-operator.v0.0.1
+  name: syncthing-operator.v1.0.0
   namespace: placeholder
 spec:
   apiservicedefinitions: {}
@@ -270,4 +270,4 @@ spec:
   maturity: alpha
   provider:
     name: '?'
-  version: 0.0.1
+  version: 1.0.0

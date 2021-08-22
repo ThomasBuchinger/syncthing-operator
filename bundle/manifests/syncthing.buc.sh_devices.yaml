@@ -17,7 +17,6 @@ spec:
   - name: v1
     schema:
       openAPIV3Schema:
-        description: Device is the Schema for the devices API
         properties:
           apiVersion:
             description: 'APIVersion defines the versioned schema of this representation
@@ -32,7 +31,7 @@ spec:
           metadata:
             type: object
           spec:
-            description: DeviceSpec defines the desired state of Device
+            description: 'CRD Spec forSyncthing Device: /api/system/config/devices'
             properties:
               apikey:
                 default: ""
@@ -65,7 +64,6 @@ spec:
             - url
             type: object
           status:
-            description: DeviceStatus defines the observed state of Device
             type: object
         type: object
     served: true

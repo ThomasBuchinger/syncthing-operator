@@ -21,6 +21,27 @@ import (
 	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
 )
 
+//+kubebuilder:validation:Enum=sendonly;receiveonly;sendreceive
+type FolderTypeEnum string
+
+const (
+	TypeSendOnly    FolderTypeEnum = "sendonly"
+	TypeReceiveOnly FolderTypeEnum = "receiveonly"
+	TypeSendReceive FolderTypeEnum = "sendreceive"
+)
+
+//+kubebuilder:validation:Enum=random;alphabetic;smallestFirst;largestFirst;newestFirst;oldestFirst
+type FolderOrderEnum string
+
+const (
+	OrderRandom        FolderOrderEnum = "random"
+	OrderAlphabetic    FolderOrderEnum = "alphabetic"
+	OrderSmallestFirst FolderOrderEnum = "smallestFirst"
+	OrderLargestFirst  FolderOrderEnum = "largestFirst"
+	OrderNewestFirst   FolderOrderEnum = "newestFirst"
+	OrderOldestFirst   FolderOrderEnum = "oldestFirst"
+)
+
 // Syncthing folder: /api/system/config/folder
 type FolderSpec struct {
 
@@ -36,16 +57,13 @@ type FolderSpec struct {
 	Path string `json:"path,omitempty"`
 
 	// Share this folder with these IDs.
-	//+kubebuilder:validation:Pattern=`[A-Z][7]([A-Z\-]{7}){7}`
 	SharedDeviceIds []string `json:"shared_ids,omitempty"`
 	// Set allowed synchronization direction
-	//+kubebuilder:validation:Enum:=[]string{'sendonly','receiveonly','sendreceive'}
 	//+kubebuilder:default="sendreceive"
-	Type string `json:"type,omitempty"`
+	Type FolderTypeEnum `json:"type,omitempty"`
 	// Set the order in which to synchronize files
-	//+kubebuilder:validation:Enum:=[]string{'random','alphabetic','smallestFirst','largestFirst','newestFirst','oldestFirst'}
 	//+kubebuilder:default:="random"
-	Order string `json:"order,omitempty"`
+	Order FolderOrderEnum `json:"order,omitempty"`
 	// Do not synchronize Permissions
 	//+kubebuilder:default:=false
 	IgnorePerms bool `json:"ignore_permissions,omitempty"`

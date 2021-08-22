@@ -1472,6 +1472,7 @@ spec:
                   is set to the Apikey
                 type: string
               allow_usage_report:
+                default: false
                 description: Allow syncthing to send anonymous usage data
                 type: boolean
               apikey:

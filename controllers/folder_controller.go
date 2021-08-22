@@ -113,16 +113,16 @@ func (r *FolderReconciler) Reconcile(ctx context.Context, req ctrl.Request) (ctr
 	}
 
 	// === Check Type ===
-	if folder.Type != folderCr.Spec.Type {
-		logger.Info("Setting Type: " + folderCr.Spec.Type)
-		folder.Type = folderCr.Spec.Type
+	if folder.Type != string(folderCr.Spec.Type) {
+		logger.Info("Setting Type: " + string(folderCr.Spec.Type))
+		folder.Type = string(folderCr.Spec.Type)
 		changed = true
 	}
 
 	// === Check Pull Order ===
-	if folder.Order != folderCr.Spec.Order {
-		logger.Info("Setting Pull Order: " + folderCr.Spec.Order)
-		folder.Order = folderCr.Spec.Order
+	if folder.Order != string(folderCr.Spec.Order) {
+		logger.Info("Setting Pull Order: " + string(folderCr.Spec.Order))
+		folder.Order = string(folderCr.Spec.Order)
 		changed = true
 	}
 

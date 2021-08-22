@@ -34,41 +34,62 @@ spec:
           metadata:
             type: object
           spec:
-            description: FolderSpec defines the desired state of Folder
+            description: 'Syncthing folder: /api/system/config/folder'
             properties:
               apikey:
                 default: ""
                 type: string
-              filesystem_type:
-                type: string
-              ignore_delete:
-                type: boolean
-              ignore_pattern:
-                items:
-                  type: string
-                type: array
               ignore_permissions:
+                default: false
+                description: Do not synchronize Permissions
                 type: boolean
               label:
+                description: Human-readable name for the folder
                 type: string
               order:
+                default: random
+                description: Set the order in which to synchronize files
+                enum:
+                - random
+                - alphabetic
+                - smallestFirst
+                - largestFirst
+                - newestFirst
+                - oldestFirst
                 type: string
               path:
+                description: Path to Folder in the container use. Defaults to /var/syncthing/<label>
+                pattern: /var/syncting/.+
                 type: string
               paused:
+                default: false
+                description: Pause synchronization for this folder
                 type: boolean
               rescan_interval:
                 default: -1
+                description: Set interval between full checks for changed files. This
+                  is only for files not picked up immediatly by fsWatcher -1 Uses
+                  a default value. 0 disables rescans
+                minimum: -1
                 type: integer
               shared_devices:
+                description: Share this Folder with Devices. This matches the human-readable
+                  device names (not their unique ID)
                 items:
                   type: string
                 type: array
               shared_ids:
+                description: Share this folder with these IDs.
                 items:
                   type: string
                 type: array
               type:
+                default: sendreceive
+                description: Set allowed synchronization direction
+                enum:
+                - sendonly
+                - receiveonly
+                - sendreceive
                 type: string
               url:
                 default: http://syncthing.svc.cluster.local:8384
@@ -80,7 +101,6 @@ spec:
             - url
             type: object
           status:
-            description: FolderStatus defines the observed state of Folder
             type: object
         type: object
     served: true
