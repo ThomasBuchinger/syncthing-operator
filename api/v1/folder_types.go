@@ -55,9 +55,19 @@ type FolderSpec struct {
 	// Path to Folder in the container use. Defaults to /var/syncthing/<label>
 	//+kubebuilder:validation:Pattern=`/var/syncting/.+`
 	Path string `json:"path,omitempty"`
-
 	// Share this folder with these IDs.
 	SharedDeviceIds []string `json:"shared_ids,omitempty"`
+
+	// Helper booleans
+
+	// Use the CustomResource name as FolderId (set to true) or let syncthing generate an id (set to false)
+	//TODO: implement
+	// This way 2 operator controlled instances can start syncing folders, without manually accepting shares (or set a device to AutoAccept)
+	//+kubebuilder:default:=false
+	UseNameAsId bool `json:"use_name_as_id,omitempty"`
+
+	// Exposed syncthing settings
+
 	// Set allowed synchronization direction
 	//+kubebuilder:default="sendreceive"
 	Type FolderTypeEnum `json:"type,omitempty"`
@@ -70,12 +80,14 @@ type FolderSpec struct {
 	// Pause synchronization for this folder
 	//+kubebuilder:default:=false
 	Paused bool `json:"paused,omitempty"`
-
 	// Set interval between full checks for changed files. This is only for files not picked up immediatly by fsWatcher
 	// -1 Uses a default value. 0 disables rescans
 	//+kubebuilder:default:=-1
 	//+kubebuilder:validation:Minimum:=-1
 	RescanInterval int `json:"rescan_interval,omitempty"`
+	// Controlls location of .stfolder-marker. Changing this is only necessary, when you want to share a readonly filesystem
+	//+kubebuilder:default:=".stfolder"
+	StMarker string `json:"stMarker,omitempty"` // For experienced Users. handle MarkerName property yourself
 }
 
 type FolderStatus struct {

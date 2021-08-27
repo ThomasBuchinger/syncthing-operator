@@ -98,6 +98,10 @@ func (r *FolderReconciler) Reconcile(ctx context.Context, req ctrl.Request) (ctr
 		folder = config.Folders[folderIndex]
 	}
 
+	// #########################
+	// # Start Reconcile Logic #
+	// #########################
+
 	// === Check Folder Label ===
 	if folder.Label != folderCr.Spec.Label {
 		logger.Info("Setting Folder Label: " + folderCr.Spec.Label)
@@ -109,6 +113,12 @@ func (r *FolderReconciler) Reconcile(ctx context.Context, req ctrl.Request) (ctr
 	if folder.Path != folderCr.Spec.Path {
 		logger.Info("Setting Path: " + folderCr.Spec.Path)
 		folder.Path = folderCr.Spec.Path
+		changed = true
+	}
+
+	if folderCr.Spec.UseNameAsId {
+		logger.Info("Setting folder ID to: " + folderCr.Name)
+		folder.Id = folderCr.Name
 		changed = true
 	}
 
@@ -147,6 +157,12 @@ func (r *FolderReconciler) Reconcile(ctx context.Context, req ctrl.Request) (ctr
 		changed = true
 	}
 
+	if folderCr.Spec.StMarker != ".stfolder" && folder.MarkerName != folderCr.Spec.StMarker {
+		logger.Info("Setting StMarker to: " + folderCr.Spec.StMarker)
+		folder.MarkerName = folderCr.Spec.StMarker
+		changed = true
+	}
+
 	// === Update Folder Configuration ===
 	if !changed {
 		logger.Info("Folder not changed: " + req.Name)
@@ -159,8 +175,13 @@ func (r *FolderReconciler) Reconcile(ctx context.Context, req ctrl.Request) (ctr
 		logger.Error(err, "Error configuring folder")
 		return ctrl.Result{Requeue: true, RequeueAfter: 10 * time.Second}, nil
 	} else {
-		logger.Info("Device successfully configured: " + req.Name)
+		logger.Info("Folder successfully configured: " + req.Name)
 	}
+
+	// #########################
+	// # Update shared devices #
+	// #########################
+
 	return ctrl.Result{Requeue: true, RequeueAfter: 10 * time.Second}, nil
 }
 
@@ -179,6 +200,7 @@ func generateStFolderConfig(folderCr syncthingv1.Folder) syncthingclient.FolderE
 		Paused:         false,
 		RescanInterval: 3600,
 		Devices:        []syncthingclient.DeviceReference{},
+		MarkerName:     ".stfolder",
 	}
 }
 
