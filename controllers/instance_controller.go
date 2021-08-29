@@ -201,6 +201,24 @@ func (r *InstanceReconciler) ReconcileKubernetes(instanceCr *syncthingv1.Instanc
 		return UpdateObject(r, foundDeployment)
 	}
 
+	var runAsUser int64 = 568
+	if instanceCr.Spec.TrueNas && (foundDeployment.Spec.Template.Spec.SecurityContext.RunAsUser != &runAsUser) {
+		yes, no, policy := true, false, corev1.FSGroupChangeOnRootMismatch
+		foundDeployment.Spec.Template.Spec.SecurityContext = &corev1.PodSecurityContext{
+			RunAsUser:           &runAsUser,
+			RunAsGroup:          &runAsUser,
+			FSGroup:             &runAsUser,
+			FSGroupChangePolicy: &policy,
+			RunAsNonRoot:        &yes,
+		}
+		foundDeployment.Spec.Template.Spec.Containers[container_index].SecurityContext = &corev1.SecurityContext{
+			Privileged:               &no,
+			ReadOnlyRootFilesystem:   &no,
+			AllowPrivilegeEscalation: &yes,
+		}
+		return UpdateObject(r, foundDeployment)
+	}
+
 	// === Done ===
 	return ctrl.Result{}, nil
 }

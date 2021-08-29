@@ -157,6 +157,7 @@ func (r *FolderReconciler) Reconcile(ctx context.Context, req ctrl.Request) (ctr
 		changed = true
 	}
 
+	// === Chack Marker Settings ===
 	if folderCr.Spec.StMarker != ".stfolder" && folder.MarkerName != folderCr.Spec.StMarker {
 		logger.Info("Setting StMarker to: " + folderCr.Spec.StMarker)
 		folder.MarkerName = folderCr.Spec.StMarker

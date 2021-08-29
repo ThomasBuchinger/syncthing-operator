@@ -104,6 +104,12 @@ type InstanceSpec struct {
 
 	MaxSendSpeedValue    int64 `json:"-"`
 	MaxReceiveSpeedValue int64 `json:"-"`
+
+	// TrueNAS Settings not propperly integrated
+	//+kubebuilder:default:=false
+	TrueNas bool `json:"truenas"`
+	//+kubebuilder:default:=32027
+	DiscoveryPort int `json:"discovery_port"` //syncthing default=21027
 }
 
 // InstanceStatus defines the observed state of Instance

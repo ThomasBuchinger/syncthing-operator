@@ -177,10 +177,10 @@ func generateDeployment(syncthing_cr *syncthingv1.Instance) *appsv1.Deployment {
 	image := syncthing_cr.Spec.ImageName
 	tag := syncthing_cr.Spec.Tag
 	var replicas int32 = 1
-	reqCpu, _ := resource.ParseQuantity("50m")
-	reqMem, _ := resource.ParseQuantity("10M")
-	limitCpu, _ := resource.ParseQuantity("500m")
-	limitMem, _ := resource.ParseQuantity("100M")
+	reqCpu, _ := resource.ParseQuantity("10m")
+	reqMem, _ := resource.ParseQuantity("50M")
+	limitCpu, _ := resource.ParseQuantity("2")
+	limitMem, _ := resource.ParseQuantity("2G")
 
 	return &appsv1.Deployment{
 		ObjectMeta: metav1.ObjectMeta{
@@ -215,10 +215,17 @@ func generateDeployment(syncthing_cr *syncthingv1.Instance) *appsv1.Deployment {
 							{
 								ContainerPort: 8384,
 								Name:          "http",
-							},
-							{
-								ContainerPort: int32(syncthing_cr.Spec.SyncPort),
+							}, {
+								ContainerPort: 22000,
 								Name:          "sync",
+								Protocol:      corev1.ProtocolUDP,
+							}, {
+								ContainerPort: 22000,
+								Name:          "sync-tcp",
+								Protocol:      corev1.ProtocolTCP,
+							}, {
+								ContainerPort: 21027,
+								Name:          "discovery",
 							},
 						},
 						LivenessProbe: &corev1.Probe{
@@ -297,6 +304,18 @@ func generateNodeportService(syncthing_cr *syncthingv1.Instance) *corev1.Service
 				TargetPort: intstr.FromString("sync"),
 				Port:       int32(syncthing_cr.Spec.SyncPort),
 				NodePort:   int32(syncthing_cr.Spec.SyncPort),
+				Protocol:   corev1.ProtocolUDP,
+			}, {
+				Name:       "sync-tcp",
+				TargetPort: intstr.FromString("sync"),
+				Port:       int32(syncthing_cr.Spec.SyncPort),
+				NodePort:   int32(syncthing_cr.Spec.SyncPort),
+				Protocol:   corev1.ProtocolTCP,
+			}, {
+				Name:       "discovery",
+				TargetPort: intstr.FromString("discovery"),
+				Port:       int32(syncthing_cr.Spec.DiscoveryPort),
+				NodePort:   int32(syncthing_cr.Spec.DiscoveryPort),
 				Protocol:   corev1.ProtocolUDP,
 			},
 			},

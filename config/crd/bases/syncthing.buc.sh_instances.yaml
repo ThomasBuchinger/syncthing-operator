@@ -4282,6 +4282,9 @@ spec:
                 required:
                 - name
                 type: object
+              discovery_port:
+                default: 32027
+                type: integer
               enable_config:
                 default: true
                 description: Enable the operator to manage global syncthing options
@@ -4354,11 +4357,17 @@ spec:
                 pattern: (-----BEGIN [A-Z\s]+ KEY-----(\n|\r|\r\n)([0-9a-zA-Z\+\/=]{64}(\n|\r|\r\n))*([0-9a-zA-Z\+\/=]{1,63}(\n|\r|\r\n))?-----END
                   [A-Z ]+ KEY-----)
                 type: string
+              truenas:
+                default: false
+                description: TrueNAS Settings not propperly integrated
+                type: boolean
               url:
                 default: http://syncthing.svc.cluster.local:8384
                 type: string
             required:
             - apikey
+            - discovery_port
+            - truenas
             - url
             type: object
           status:

@@ -61,7 +61,6 @@ type FolderSpec struct {
 	// Helper booleans
 
 	// Use the CustomResource name as FolderId (set to true) or let syncthing generate an id (set to false)
-	//TODO: implement
 	// This way 2 operator controlled instances can start syncing folders, without manually accepting shares (or set a device to AutoAccept)
 	//+kubebuilder:default:=false
 	UseNameAsId bool `json:"use_name_as_id,omitempty"`

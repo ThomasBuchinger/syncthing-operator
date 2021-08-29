@@ -65,13 +65,6 @@ spec:
                 default: false
                 description: Pause synchronization for this folder
                 type: boolean
-              readonly:
-                default: false
-                description: 'Handle ReadOnly Filesystems TODO: implement If you want
-                  to sync ReadOnly filesystems to "just work", set ReadOnly to true.
-                  This will place the .stfolder-marker in the data-root (named .stfolder-<folderId>)
-                  and set Type to "sendonly"'
-                type: boolean
               rescan_interval:
                 default: -1
                 description: Set interval between full checks for changed files. This
@@ -108,10 +101,10 @@ spec:
                 type: string
               use_name_as_id:
                 default: false
-                description: 'Use the CustomResource name as FolderId (set to true)
-                  or let syncthing generate an id (set to false) TODO: implement This
-                  way 2 operator controlled instances can start syncing folders, without
-                  manually accepting shares (or set a device to AutoAccept)'
+                description: Use the CustomResource name as FolderId (set to true)
+                  or let syncthing generate an id (set to false) This way 2 operator
+                  controlled instances can start syncing folders, without manually
+                  accepting shares (or set a device to AutoAccept)
                 type: boolean
             required:
             - apikey
