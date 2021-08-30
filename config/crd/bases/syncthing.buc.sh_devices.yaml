@@ -61,9 +61,7 @@ spec:
                 default: http://syncthing.svc.cluster.local:8384
                 type: string
             required:
-            - apikey
             - id
-            - url
             type: object
           status:
             type: object

@@ -4365,10 +4365,8 @@ spec:
                 default: http://syncthing.svc.cluster.local:8384
                 type: string
             required:
-            - apikey
             - discovery_port
             - truenas
-            - url
             type: object
           status:
             description: InstanceStatus defines the observed state of Instance
