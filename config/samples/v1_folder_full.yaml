@@ -1,0 +1,26 @@
+apiVersion: syncthing.buc.sh/v1
+kind: Folder
+metadata:
+  name: folder-example-folder
+spec:
+  # Operator specific
+  # API Info to manage an existing syncthing (if syncthing is not managed by the operator)
+  #url: https://syncthing.my.domain.com:8384/
+  #apikey: my-secret-api-key
+  use_name_as_id: false
+
+  # required
+  label: "MyexampleFolder"
+  shared_devices:
+  - "MyExampleDevice"
+
+  # optional
+  path: /var/syncthing/example
+  shared_ids:
+  - "KJ2KICY-7XOAWLI-4KO7SSL-6K2373Q-2QZLFJ5-LKS63UU-CMJPEOL-T7O5WQY"
+  type: "sendonly"
+  order: random
+  ignore_permissions: false
+  paused: false
+  rescan_interval: -1
+  stMarker: .stfolder

@@ -1,19 +1,28 @@
-apiVersion: syncthing.buc.sh/v1alpha1
+apiVersion: syncthing.buc.sh/v1
 kind: Instance
 metadata:
-  name: example-syncthing
+  name: full-example-instance
 spec:
-  tag: latest
-  config_volume:
-    hostPath:
-      path: /tmp/syncthing-config
-    name: config-root
-  data_volumes:
-    - hostPath:
-        path: /tmp/syncthing-data
-      name: data-root
+  # operator specific
+  enable_instance: true
+  enable_configuration: true
+  enable_nodeport: false
+  # API Info to manage an existing syncthing (enable_instance=false)
+  #url: https://syncthing.my.domain.com:8384/
+  #apikey: my-secret-api-key
 
-  apikey: "qwertyuiop"
+  # syncthing deployment
+  image: docker.io/syncthing/syncthing
+  tag: latest
+  data_volume:
+    name: data-root
+    persistentVolumeClaim:
+      claimName: syncthing-data
+  config_volume:
+    name: config-root
+    emptyDir: {}
+  additional_data: []
+  sync_port: 32000
   tls_key: |
     -----BEGIN RSA PRIVATE KEY-----
     MIIEpQIBAAKCAQEA4tNbZbNfjr7jHH2UTCymZn4DPmzqOZSpgimH90FDU4q6kVOn
@@ -63,3 +72,12 @@ spec:
     C+6DbKKnudNvd78C0ei9IJpN+jr2ytDNwfwLfgqvdODNXTwizsYsyQvmxABy9GT4
     ieztJ2Z7hWwkk42GoYs0Dhs=
     -----END CERTIFICATE-----
+
+  # syncthing config
+  allow_usage_report: false
+  insecure_web: false
+  admin_user: syncthing
+  apikey: my-secret-api-key
+  # https_crt: ""
+  # https_key: ""
+  

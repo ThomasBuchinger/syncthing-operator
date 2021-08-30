@@ -1,9 +1,0 @@
-apiVersion: syncthing.buc.sh/v1alpha1
-kind: Device
-metadata:
-  name: fedora34
-spec:
-  id: "KJ2KICY-7XOAWLI-4KO7SSL-6K2373Q-2QZLFJ5-LKS63UU-CMJPEOL-T7O5WQY"
-  
-  max_send_speed: "1M"
-  max_receive_speed: "1M"

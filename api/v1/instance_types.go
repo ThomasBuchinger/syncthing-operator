@@ -40,7 +40,7 @@ type InstanceSpec struct {
 
 	// Embed Syncthing API info into InstanceSpec.
 	// This allows the operator to control an external Syncthing instance
-	Clientconfig syncthingclient.StClientConfig `json:",inline"`
+	Clientconfig syncthingclient.StClientConfig `json:",inline,omitempty"`
 
 	// Hardcode Syncthing Certificate and private key
 	// This certificate is used to authenticate syncthing to other syncthing-instances. Use HttpsCrt/HttpsKey to configure HTTPS for the webinterface

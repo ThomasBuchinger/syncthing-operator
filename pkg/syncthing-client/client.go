@@ -23,9 +23,9 @@ const StClientHttpsLabel = "https.syncthing.buc.sh"
 // Optional in CustomResource definition of synyncthing instance. Shared by all CRDs
 type StClientConfig struct {
 	//+kubebuilder:default:="http://syncthing.svc.cluster.local:8384"
-	ApiUrl string `json:"url"`
+	ApiUrl string `json:"url,omitempty"`
 	//+kubebuilder:default:=""
-	ApiKey string `json:"apikey"`
+	ApiKey string `json:"apikey,omitempty"`
 }
 
 // Syncthing Client Object

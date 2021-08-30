@@ -1,0 +1,18 @@
+apiVersion: syncthing.buc.sh/v1alpha1
+kind: Device
+metadata:
+  name: device-example-full
+spec:
+  # Operator specific
+  # API Info to manage an existing syncthing (if syncthing is not managed by the operator)
+  #url: https://syncthing.my.domain.com:8384/
+  #apikey: my-secret-api-key
+
+  # required
+  id: "KJ2KICY-7XOAWLI-4KO7SSL-6K2373Q-2QZLFJ5-LKS63UU-CMJPEOL-T7O5WQY"
+  
+  # optional
+  auto_accept: true
+  paused: false
+  unstrusted: my-encryption-password
+  ignored_folders: []
