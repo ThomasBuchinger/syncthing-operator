@@ -28,7 +28,7 @@ type DeviceSpec struct {
 	Clientconfig syncthingclient.StClientConfig `json:",inline"`
 
 	// Syncthing DeviceID
-	//+kubebuilder:validation:Pattern=`[A-Z][7]([A-Z\-]{7}){7}`
+	//TODO: this regex does not work: +kubebuilder:validation:Pattern=`[A-Z][7]([A-Z\-]{7}){7}`
 	DeviceId string `json:"id"`
 
 	// Automatically Accept all Folders shared from this Device

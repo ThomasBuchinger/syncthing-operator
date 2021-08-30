@@ -43,8 +43,7 @@ spec:
                 description: Automatically Accept all Folders shared from this Device
                 type: boolean
               id:
-                description: Syncthing DeviceID
-                pattern: '[A-Z][7]([A-Z\-]{7}){7}'
+                description: 'Syncthing DeviceID TODO: this regex does not work: +kubebuilder:validation:Pattern=`[A-Z][7]([A-Z\-]{7}){7}`'
                 type: string
               ignored_folders:
                 items:

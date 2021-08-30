@@ -1,4 +1,4 @@
-apiVersion: syncthing.buc.sh/v1alpha1
+apiVersion: syncthing.buc.sh/v1
 kind: Device
 metadata:
   name: device-example-full
