@@ -14,17 +14,17 @@ spec:
       displayName: Device
       kind: Device
       name: devices.syncthing.buc.sh
-      version: v1alpha1
+      version: v1
     - description: Folder is the Schema for the folders API
       displayName: Folder
       kind: Folder
       name: folders.syncthing.buc.sh
-      version: v1alpha1
+      version: v1
     - description: Instance is the Schema for the instances API
       displayName: Instance
       kind: Instance
       name: instances.syncthing.buc.sh
-      version: v1alpha1
+      version: v1
   description: Run Syncthing on Kubernetes or automate an existing Syncthing instance
   displayName: Syncthing Operator
   icon:
