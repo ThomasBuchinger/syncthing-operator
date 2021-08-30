@@ -107,9 +107,9 @@ type InstanceSpec struct {
 
 	// TrueNAS Settings not propperly integrated
 	//+kubebuilder:default:=false
-	TrueNas bool `json:"truenas"`
+	TrueNas bool `json:"truenas,omitempty"`
 	//+kubebuilder:default:=32027
-	DiscoveryPort int `json:"discovery_port"` //syncthing default=21027
+	DiscoveryPort int `json:"discovery_port,omitempty"` //syncthing default=21027
 }
 
 // InstanceStatus defines the observed state of Instance

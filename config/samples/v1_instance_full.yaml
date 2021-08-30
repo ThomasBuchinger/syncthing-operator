@@ -5,7 +5,7 @@ metadata:
 spec:
   # operator specific
   enable_instance: true
-  enable_configuration: true
+  enable_config: true
   enable_nodeport: false
   # API Info to manage an existing syncthing (enable_instance=false)
   #url: https://syncthing.my.domain.com:8384/

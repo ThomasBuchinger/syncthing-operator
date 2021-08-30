@@ -53,7 +53,7 @@ type FolderSpec struct {
 	// Share this Folder with Devices. This matches the human-readable device names (not their unique ID)
 	SharedDeviceNames []string `json:"shared_devices"`
 	// Path to Folder in the container use. Defaults to /var/syncthing/<label>
-	//+kubebuilder:validation:Pattern=`/var/syncting/.+`
+	//TODO: This regex is wrong: +kubebuilder:validation:Pattern=`/var/syncting/.+`
 	Path string `json:"path,omitempty"`
 	// Share this folder with these IDs.
 	SharedDeviceIds []string `json:"shared_ids,omitempty"`

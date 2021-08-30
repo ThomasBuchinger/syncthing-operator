@@ -58,8 +58,8 @@ spec:
                 - oldestFirst
                 type: string
               path:
-                description: Path to Folder in the container use. Defaults to /var/syncthing/<label>
-                pattern: /var/syncting/.+
+                description: 'Path to Folder in the container use. Defaults to /var/syncthing/<label>
+                  TODO: This regex is wrong: +kubebuilder:validation:Pattern=`/var/syncting/.+`'
                 type: string
               paused:
                 default: false
