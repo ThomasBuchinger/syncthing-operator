@@ -10,8 +10,7 @@ spec:
   apiservicedefinitions: {}
   customresourcedefinitions:
     owned:
-    - description: Device is the Schema for the devices API
-      displayName: Device
+    - displayName: Device
       kind: Device
       name: devices.syncthing.buc.sh
       version: v1

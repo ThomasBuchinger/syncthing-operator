@@ -51,8 +51,8 @@ type InstanceReconciler struct {
 //+kubebuilder:rbac:groups=syncthing.buc.sh,namespace=default,resources=instances/finalizers,verbs=update
 //+kubebuilder:rbac:groups=apps,namespace=default,resources=deployments,verbs=get;list;watch;create;update;patch;delete
 //+kubebuilder:rbac:groups=core,namespace=default,resources=pods,verbs=get;list;
-//+kubebuilder:rbac:groups=core,namespace=default,resources=services,verbs=get;list;
-//+kubebuilder:rbac:groups=core,namespace=default,resources=secrets,verbs=get;list;
+//+kubebuilder:rbac:groups=core,namespace=default,resources=services,verbs=get;list;create;update;patch;delete
+//+kubebuilder:rbac:groups=core,namespace=default,resources=secrets,verbs=get;list;create;update;patch;delete
 func (r *InstanceReconciler) Reconcile(ctx context.Context, req ctrl.Request) (ctrl.Result, error) {
 	r.logger = log.FromContext(ctx)
 	r.ctx = ctx
