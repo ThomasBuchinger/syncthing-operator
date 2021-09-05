@@ -1,11 +1,16 @@
 package controllers
 
 import (
+	"context"
+	"fmt"
+
 	syncthingv1 "github.com/thomasbuchinger/syncthing-operator/api/v1"
 	syncthingclient "github.com/thomasbuchinger/syncthing-operator/pkg/syncthing-client"
+	"sigs.k8s.io/controller-runtime/pkg/client"
 
 	appsv1 "k8s.io/api/apps/v1"
 	corev1 "k8s.io/api/core/v1"
+	"k8s.io/apimachinery/pkg/api/errors"
 	"k8s.io/apimachinery/pkg/api/resource"
 	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
 	"k8s.io/apimachinery/pkg/util/intstr"
@@ -88,6 +93,24 @@ func getVolumeMountIndexByName(list []corev1.VolumeMount, name string) int {
 		}
 	}
 	return -1
+}
+
+func findTlsSecretInNamespace(ns string, c interface{ client.Client }, ctx context.Context) (*corev1.Secret, error) {
+	secrets := &corev1.SecretList{}
+	err := c.List(ctx, secrets, client.InNamespace(ns), client.HasLabels{syncthingclient.StClientSyncTlsLabel})
+	if err != nil && errors.IsNotFound(err) {
+		// Finding nothing isn't a problem
+		return nil, nil
+	}
+	if err != nil {
+		// Return error
+		return nil, err
+	}
+	if len(secrets.Items) != 1 {
+		return nil, fmt.Errorf("found %d secrets with '%s'-label", len(secrets.Items), syncthingclient.StClientSyncTlsLabel)
+	}
+
+	return &secrets.Items[0], nil
 }
 
 // Mount the secret as a Volume in the deployment

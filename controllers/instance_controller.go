@@ -129,19 +129,36 @@ func (r *InstanceReconciler) ReconcileKubernetes(instanceCr *syncthingv1.Instanc
 	// === Create necessary API opbjects ===
 	// =====================================
 
-	// === Look for the referenced TLS Secret (the one for the sync, not HTTPS) ===
-	secret := generateTlsSecret(instanceCr)
-	ctrl.SetControllerReference(instanceCr, secret, r.Scheme)
-	createReturn, obj, result, err := GetOrCreateObject(r, instanceCr.GetNamespace(), secret)
-	if createReturn.IsOneOf(Created, GetError, CreateError) {
-		return result, err
+	// === Look for TLS Secret: in the CustomResource ===
+	// (the one for the sync, not HTTPS)
+	var foundSecret *corev1.Secret
+	if instanceCr.Spec.TlsKey != "" && instanceCr.Spec.TlsCrt != "" {
+		r.logger.V(1).Info("Using TLS certificate from CustomResource")
+		secret := generateTlsSecret(instanceCr)
+		ctrl.SetControllerReference(instanceCr, secret, r.Scheme)
+		createReturn, obj, result, err := GetOrCreateObject(r, instanceCr.GetNamespace(), secret)
+		if createReturn.IsOneOf(Created, GetError, CreateError) {
+			return result, err
+		}
+		foundSecret = obj.(*corev1.Secret) // type-cast
 	}
-	foundSecret := obj.(*corev1.Secret) // type-cast
+	// === Look for TLS Secret: labeled Secret ===
+	if foundSecret == nil {
+		r.logger.V(1).Info("Looking for TLS certificate in Namespace " + r.req.Namespace)
+		foundSecret, err := findTlsSecretInNamespace(r.req.Namespace, r.Client, r.ctx)
+		if err != nil {
+			return ctrl.Result{}, err
+		}
+		if foundSecret == nil {
+			r.logger.V(1).Info(fmt.Sprintf("No secret with label '%s' found in namespace '%s'. Retrying...", syncthingclient.StClientSyncTlsLabel, r.req.Namespace))
+			return ctrl.Result{Requeue: true, RequeueAfter: 1 * time.Minute}, nil
+		}
+	}
 
 	// === Ensure Deployment exists ===
 	deployment := generateDeployment(instanceCr)
 	ctrl.SetControllerReference(instanceCr, deployment, r.Scheme)
-	createReturn, obj, result, err = GetOrCreateObject(r, instanceCr.GetNamespace(), deployment)
+	createReturn, obj, result, err := GetOrCreateObject(r, instanceCr.GetNamespace(), deployment)
 	if createReturn.IsOneOf(Created, GetError, CreateError) {
 		return result, err
 	}
