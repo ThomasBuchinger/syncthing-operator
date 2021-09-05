@@ -37,6 +37,7 @@ rules:
   - list
   - patch
   - update
+  - watch
 - apiGroups:
   - ""
   resources:
@@ -48,6 +49,7 @@ rules:
   - list
   - patch
   - update
+  - watch
 - apiGroups:
   - syncthing.buc.sh
   resources:
