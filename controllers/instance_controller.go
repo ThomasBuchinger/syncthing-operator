@@ -154,6 +154,7 @@ func (r *InstanceReconciler) ReconcileKubernetes(instanceCr *syncthingv1.Instanc
 			return ctrl.Result{Requeue: true, RequeueAfter: 1 * time.Minute}, nil
 		}
 	}
+	r.logger.Info(fmt.Sprintf("Using Secret '%s' for TLS certificate.", foundSecret.Name))
 
 	// === Ensure Deployment exists ===
 	deployment := generateDeployment(instanceCr)

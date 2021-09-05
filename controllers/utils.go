@@ -30,10 +30,10 @@ func (n CreateReturnValues) IsOneOf(list ...CreateReturnValues) bool {
 
 // Update a Resource, with logging and return a reconcile-result
 func UpdateObject(r *InstanceReconciler, obj client.Object) (ctrl.Result, error) {
-	r.logger.Info(fmt.Sprintf("Updating %s/%s...", obj.GetObjectKind(), obj.GetName()))
+	r.logger.Info(fmt.Sprintf("Updating %s/%s...", obj.GetObjectKind().GroupVersionKind().Kind, obj.GetName()))
 	err := r.Update(r.ctx, obj)
 	if err != nil {
-		r.logger.Error(err, fmt.Sprintf("Failed to update %s/%s", obj.GetObjectKind(), obj.GetName()))
+		r.logger.Error(err, fmt.Sprintf("Failed to update %s/%s", obj.GetObjectKind().GroupVersionKind().Kind, obj.GetName()))
 		return ctrl.Result{}, err
 	}
 	return ctrl.Result{Requeue: true}, nil
@@ -49,19 +49,19 @@ func GetOrCreateObject(r *InstanceReconciler, ns string, obj client.Object) (Cre
 
 		err2 := r.Create(r.ctx, obj) // Try to create the object
 		if err2 != nil {
-			r.logger.Error(err2, fmt.Sprintf("Failed to create %s/%s", obj.GetObjectKind(), obj.GetName()))
+			r.logger.Error(err2, fmt.Sprintf("Failed to create %s/%s", obj.GetObjectKind().GroupVersionKind().Kind, obj.GetName()))
 			return CreateError, nil, ctrl.Result{}, err2
 		}
 
 		// Suggest to Requeue the request after creating the object
 		// By doing one thing at a time, we avoid branches in the code and there isn't a good reason not to
-		r.logger.Info(fmt.Sprintf("Successfully created %s/%s", obj.GetObjectKind(), obj.GetName()))
+		r.logger.Info(fmt.Sprintf("Successfully created %s/%s", obj.GetObjectKind().GroupVersionKind().Kind, obj.GetName()))
 		return Created, obj, ctrl.Result{Requeue: true}, nil
 	} else if err != nil {
-		r.logger.Error(err, fmt.Sprintf("Failed to GET %s/%s", obj.GetObjectKind(), obj.GetName()))
+		r.logger.Error(err, fmt.Sprintf("Failed to GET %s/%s", obj.GetObjectKind().GroupVersionKind().Kind, obj.GetName()))
 		return GetError, nil, ctrl.Result{}, err
 	}
 
-	r.logger.V(1).Info(fmt.Sprintf("Found %s/%s", obj.GetObjectKind(), obj.GetName()))
+	r.logger.V(1).Info(fmt.Sprintf("Found %s/%s", obj.GetObjectKind().GroupVersionKind().Kind, obj.GetName()))
 	return Existed, obj, ctrl.Result{}, nil
 }
