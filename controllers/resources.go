@@ -187,7 +187,7 @@ func generateVolumeMountConfigs(instanceCr *syncthingv1.Instance, volumes []core
 // TLS certificates for sync protocol
 func generateSyncSecret(instanceCr *syncthingv1.Instance) *corev1.Secret {
 	secretLabels := commonSyncthingLabels(instanceCr.Name)
-	secretLabels[syncthingclient.StClientSyncTlsLabel] = "pem"
+	secretLabels[syncthingclient.StClientLabelSyncTls] = "pem"
 
 	secret := &corev1.Secret{
 		ObjectMeta: metav1.ObjectMeta{
@@ -299,10 +299,14 @@ func generateDeployment(instanceCr *syncthingv1.Instance) *appsv1.Deployment {
 
 // Generate a ClusterIP Service, but leave exposing syncthing to the user
 func generateClusterService(instanceCr *syncthingv1.Instance) *corev1.Service {
+	labels := commonSyncthingLabels(instanceCr.Name)
+	labels[syncthingclient.StClienLabeltUrlDiscovery] = "cluster-service"
+
 	return &corev1.Service{
 		ObjectMeta: metav1.ObjectMeta{
-			Name:      instanceCr.Name + "-web",
+			Name:      instanceCr.Name + "-svc",
 			Namespace: instanceCr.Namespace,
+			Labels:    labels,
 		},
 		Spec: corev1.ServiceSpec{
 			Type:     corev1.ServiceTypeClusterIP,

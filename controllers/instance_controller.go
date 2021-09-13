@@ -167,13 +167,13 @@ func (r *InstanceReconciler) ReconcileKubernetes(instanceCr *syncthingv1.Instanc
 	// === Look for Sync Secret ===
 	if syncSecret == nil {
 		r.logger.V(1).Info("Looking for Sync certificate in Namespace " + r.req.Namespace)
-		tmpSecret, err := syncthingclient.FindSecretByLabel(r.req.Namespace, syncthingclient.StClientSyncTlsLabel, r.Client, r.ctx)
+		tmpSecret, err := syncthingclient.FindSecretByLabel(r.req.Namespace, syncthingclient.StClientLabelSyncTls, r.Client, r.ctx)
 		syncSecret = tmpSecret
 		if err != nil {
 			return ctrl.Result{}, err
 		}
 		if syncSecret == nil {
-			r.logger.V(1).Info(fmt.Sprintf("No secret with label '%s' found in namespace '%s'. Retrying...", syncthingclient.StClientSyncTlsLabel, r.req.Namespace))
+			r.logger.V(1).Info(fmt.Sprintf("No secret with label '%s' found in namespace '%s'. Retrying...", syncthingclient.StClientLabelSyncTls, r.req.Namespace))
 			return ctrl.Result{Requeue: true, RequeueAfter: 1 * time.Minute}, nil
 		}
 	}

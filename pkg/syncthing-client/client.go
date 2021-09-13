@@ -20,8 +20,9 @@ import (
 )
 
 const StClientConfigLabel string = "syncthing.buc.sh/config"
-const StClientSyncTlsLabel = "syncthing.buc.sh/sync-cert"
-const StClientHttpsLabel = "syncthing.buc.sh/https-cert"
+const StClientLabelSyncTls = "syncthing.buc.sh/sync-cert"
+const StClientLabelHttps = "syncthing.buc.sh/https-cert"
+const StClienLabeltUrlDiscovery = "syncthing.buc.sh/url-discovery"
 const StClientKeyUrl = "url"
 const StClientKeyApiKey = "apikey"
 
@@ -87,10 +88,13 @@ func FromCr(cr syncthingv1.StClientConfig, ns string, client interface{ client.C
 		}
 	}
 
-	// Use default value for URL
+	// Check Cluster-DNS for API
 	if !config_valid.Url {
-		url_string = "http://syncthing.svc.cluster.local:8384"
-		config_valid.Url = true
+		svc, err := FindServiceByLabel(ns, StClienLabeltUrlDiscovery, "cluster-service", client, ctx)
+		if svc != nil && err == nil {
+			url_string = fmt.Sprintf("http://%s.%s:%d", svc.Name, "svc.cluster.local", 8384)
+			config_valid.Url = true
+		}
 	}
 
 	// Build StClient
@@ -124,13 +128,29 @@ func FindSecretByLabel(ns string, label string, c interface{ client.Client }, ct
 		return nil, nil
 	}
 	if err != nil {
-		// Return error
 		return nil, err
 	}
 	if len(secretList.Items) != 1 {
-		return nil, fmt.Errorf("found %d secrets with '%s'-label", len(secretList.Items), StClientSyncTlsLabel)
+		return nil, fmt.Errorf("found %d secrets with '%s'-label", len(secretList.Items), label)
 	}
 	return &secretList.Items[0], nil
+}
+
+func FindServiceByLabel(ns string, label string, value string, c interface{ client.Client }, ctx context.Context) (*corev1.Service, error) {
+	serviceList := &corev1.ServiceList{}
+	err := c.List(ctx, serviceList, client.InNamespace(ns), client.MatchingLabels{StClienLabeltUrlDiscovery: value})
+	if err != nil && errors.IsNotFound(err) {
+		// Finding nothing isn't a problem
+		return nil, nil
+	}
+	if err != nil {
+		return nil, err
+	}
+	if len(serviceList.Items) != 1 {
+		return nil, fmt.Errorf("found %d services with '%s=%s'-label", len(serviceList.Items), label, value)
+	}
+	return &serviceList.Items[0], nil
+
 }
 
 // helper method for http requests
