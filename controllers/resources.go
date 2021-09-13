@@ -94,42 +94,38 @@ func getVolumeMountIndexByName(list []corev1.VolumeMount, name string) int {
 
 // Set command-parameter for container
 func setCommandParameter(paramName string, paramValue string, container *corev1.Container) bool {
-	// Convert string-array to map
-	cmdAsMap := make(map[string]string, len(container.Command)+1)
-	var sep, name, value string
-	for _, part := range container.Command {
-		sep = " "
-		if strings.Contains(part, "=") {
-			sep = "="
-		}
+	param_string := paramName + "=" + paramValue
+	if paramValue == "" {
+		param_string = paramName
+	}
+
+	// Find paramName in Command array
+	var sep, old_value string = "=", ""
+	index := -1
+	for i, part := range container.Command {
 		splitted := strings.SplitN(part, sep, 2)
-		name = splitted[0]
-		if len(splitted) == 2 {
-			value = splitted[1]
-		} else {
-			value = ""
-		}
-		cmdAsMap[name] = value
-	}
 
-	// return false if parameter is already set
-	old_value, exists := cmdAsMap[paramName]
-	if exists && old_value == paramValue {
-		return false
-	}
-
-	// Update parameter && regenerate command array
-	cmdAsMap[paramName] = paramValue
-	new_command := make([]string, len(cmdAsMap))
-	for name, val := range cmdAsMap {
-		if val != "" {
-			new_command = append(new_command, name+" "+val)
-		} else {
-			new_command = append(new_command, name)
+		if splitted[0] == paramName {
+			index = i
+			if len(splitted) == 2 {
+				old_value = splitted[1]
+			} else {
+				old_value = ""
+			}
 		}
 	}
-	container.Command = new_command
-	return true
+
+	// Update Parameter
+	if index == -1 {
+		container.Command = append(container.Command, param_string)
+		return true
+	}
+	if old_value != paramValue {
+		container.Command[index] = param_string
+		return true
+	}
+
+	return false
 }
 
 // Mount the secret as a Volume in the deployment
@@ -252,8 +248,8 @@ func generateDeployment(instanceCr *syncthingv1.Instance) *appsv1.Deployment {
 						Command: []string{
 							"syncthing",
 							"serve",
-							"--config" + " " + instanceCr.Spec.ConfigPath,
-							"--data" + " " + instanceCr.Spec.DataPath,
+							"--config=" + instanceCr.Spec.ConfigPath,
+							"--data=" + instanceCr.Spec.DataPath,
 						},
 						Ports: []corev1.ContainerPort{
 							{

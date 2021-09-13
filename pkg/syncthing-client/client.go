@@ -8,6 +8,7 @@ import (
 	"io"
 	"net/http"
 	"net/url"
+	"strings"
 
 	"github.com/go-logr/logr"
 	corev1 "k8s.io/api/core/v1"
@@ -70,9 +71,11 @@ func FromCr(cr syncthingv1.StClientConfig, ns string, client interface{ client.C
 		if err != nil {
 			// Log error. This is not (yet) fatal
 			logger.V(1).Info("Error quering Secret: %s", err.Error())
+		} else if secret == nil {
+			logger.V(1).Info("No Secret with label '%s' found in namespace '%s'", StClientConfigLabel, ns)
 		} else {
 			url_bytes, ok := secret.Data[StClientKeyUrl]
-			if ok && !config_valid.Key {
+			if ok && !config_valid.Url {
 				url_string = string(url_bytes)
 				config_valid.Url = true
 			}
@@ -91,11 +94,14 @@ func FromCr(cr syncthingv1.StClientConfig, ns string, client interface{ client.C
 	}
 
 	// Build StClient
-	if !(config_valid.Url && len(url_string) != 0) {
+	if len(url_string) == 0 {
 		return nil, fmt.Errorf("API URL is empty")
 	}
-	if !(config_valid.Key && len(key) == 0) {
-		return nil, fmt.Errorf("no API key found")
+	if !config_valid.Key {
+		return nil, fmt.Errorf("no API-Key found")
+	}
+	if len(key) == 0 {
+		return nil, fmt.Errorf("API-Key is empty")
 	}
 	apiurl, err := url.Parse(url_string)
 	if err != nil {
@@ -106,7 +112,7 @@ func FromCr(cr syncthingv1.StClientConfig, ns string, client interface{ client.C
 	c.HttpClient = http.Client{}
 	c.logger = logger
 	c.BaseUrl = *apiurl
-	c.ApiKey = key
+	c.ApiKey = strings.Trim(key, "\n \t")
 	return c, nil
 }
 

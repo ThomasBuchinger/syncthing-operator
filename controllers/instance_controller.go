@@ -54,7 +54,7 @@ type InstanceReconciler struct {
 //+kubebuilder:rbac:groups=core,namespace=default,resources=services,verbs=get;list;create;update;patch;delete
 //+kubebuilder:rbac:groups=core,namespace=default,resources=secrets,verbs=get;list;create;update;patch;delete
 func (r *InstanceReconciler) Reconcile(ctx context.Context, req ctrl.Request) (ctrl.Result, error) {
-	r.logger = log.FromContext(ctx)
+	r.logger = log.Log.WithValues("kind", "Instance", "name", req.Name, "namespace", req.Namespace)
 	r.ctx = ctx
 	r.req = req
 
@@ -141,12 +141,6 @@ func (r *InstanceReconciler) ReconcileKubernetes(instanceCr *syncthingv1.Instanc
 			return result, err
 		}
 		syncSecret = obj.(*corev1.Secret) // type-cast
-
-		// Set configSecret as well (if label is set)
-		_, exists := syncSecret.ObjectMeta.Labels[syncthingclient.StClientConfigLabel]
-		if exists {
-			instanceCr.Spec.Clientconfig.ConfigSecret = syncSecret
-		}
 	}
 
 	// === Ensure Deployment exists ===
@@ -184,6 +178,12 @@ func (r *InstanceReconciler) ReconcileKubernetes(instanceCr *syncthingv1.Instanc
 		}
 	}
 	r.logger.Info(fmt.Sprintf("Using Secret '%s' as Sync certificate", syncSecret.Name))
+
+	// === Use syncSecret as configSecret as well (if label is set) ===
+	_, exists := syncSecret.ObjectMeta.Labels[syncthingclient.StClientConfigLabel]
+	if exists {
+		instanceCr.Spec.Clientconfig.ConfigSecret = syncSecret
+	}
 
 	// ================================================
 	// === Apply configuration to Deployment object ===
@@ -262,8 +262,9 @@ func (r *InstanceReconciler) ReconcileKubernetes(instanceCr *syncthingv1.Instanc
 
 	// === A bunch of stuff not yet properly implemented ===
 	var runAsUser int64 = 568
-	if instanceCr.Spec.TrueNas && (foundDeployment.Spec.Template.Spec.SecurityContext.RunAsUser != &runAsUser) {
+	if instanceCr.Spec.TrueNas && (*foundDeployment.Spec.Template.Spec.SecurityContext.RunAsUser != runAsUser) {
 		yes, no, policy := true, false, corev1.FSGroupChangeOnRootMismatch
+		r.logger.Info(fmt.Sprintf("Set Security Context to: uid=%d FSGroupChangePolicy=%s, readonlyFS=%v", runAsUser, policy, no))
 		foundDeployment.Spec.Template.Spec.SecurityContext = &corev1.PodSecurityContext{
 			RunAsUser:           &runAsUser,
 			RunAsGroup:          &runAsUser,
@@ -280,7 +281,7 @@ func (r *InstanceReconciler) ReconcileKubernetes(instanceCr *syncthingv1.Instanc
 	}
 
 	// === Done ===
-	return ctrl.Result{}, nil
+	return ctrl.Result{Requeue: false}, nil
 }
 
 func (r *InstanceReconciler) ReconcileNodeportservice(instanceCr *syncthingv1.Instance) (ctrl.Result, error) {
