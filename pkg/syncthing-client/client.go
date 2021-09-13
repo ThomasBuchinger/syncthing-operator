@@ -92,17 +92,20 @@ func FromCr(cr syncthingv1.StClientConfig, ns string, client interface{ client.C
 	if !config_valid.Url {
 		svc, err := FindServiceByLabel(ns, StClienLabeltUrlDiscovery, "cluster-service", client, ctx)
 		if svc != nil && err == nil {
-			url_string = fmt.Sprintf("http://%s.%s:%d", svc.Name, "svc.cluster.local", 8384)
+			url_string = fmt.Sprintf("http://%s:%d", svc.Name, 8384) // Resolve Service-Name using Cluster-DNS
 			config_valid.Url = true
 		}
 	}
 
 	// Build StClient
+	if !config_valid.Url {
+		return nil, fmt.Errorf("API-URL not found")
+	}
 	if len(url_string) == 0 {
 		return nil, fmt.Errorf("API URL is empty")
 	}
 	if !config_valid.Key {
-		return nil, fmt.Errorf("no API-Key found")
+		return nil, fmt.Errorf("API-Key not found")
 	}
 	if len(key) == 0 {
 		return nil, fmt.Errorf("API-Key is empty")
