@@ -16,9 +16,11 @@ import (
 	"sigs.k8s.io/controller-runtime/pkg/log"
 )
 
-const StClientConfigLabel string = "config.syncthing.buc.sh"
-const StClientSyncTlsLabel = "sync.syncthing.buc.sh"
-const StClientHttpsLabel = "https.syncthing.buc.sh"
+const StClientConfigLabel string = "syncthing.buc.sh/config"
+const StClientSyncTlsLabel = "syncthing.buc.sh/sync-cert"
+const StClientHttpsLabel = "syncthing.buc.sh/https-cert"
+const StClientKeyUrl = "url"
+const StClientKeyApiKey = "apikey"
 
 // Optional in CustomResource definition of synyncthing instance. Shared by all CRDs
 type StClientConfig struct {

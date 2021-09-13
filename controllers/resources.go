@@ -3,6 +3,7 @@ package controllers
 import (
 	"context"
 	"fmt"
+	"strings"
 
 	syncthingv1 "github.com/thomasbuchinger/syncthing-operator/api/v1"
 	syncthingclient "github.com/thomasbuchinger/syncthing-operator/pkg/syncthing-client"
@@ -95,9 +96,9 @@ func getVolumeMountIndexByName(list []corev1.VolumeMount, name string) int {
 	return -1
 }
 
-func findTlsSecretInNamespace(ns string, c interface{ client.Client }, ctx context.Context) (*corev1.Secret, error) {
-	secrets := &corev1.SecretList{}
-	err := c.List(ctx, secrets, client.InNamespace(ns), client.HasLabels{syncthingclient.StClientSyncTlsLabel})
+func FindSecretByLabel(ns string, label string, c interface{ client.Client }, ctx context.Context) (*corev1.Secret, error) {
+	secretList := &corev1.SecretList{}
+	err := c.List(ctx, secretList, client.InNamespace(ns), client.HasLabels{label})
 	if err != nil && errors.IsNotFound(err) {
 		// Finding nothing isn't a problem
 		return nil, nil
@@ -106,17 +107,56 @@ func findTlsSecretInNamespace(ns string, c interface{ client.Client }, ctx conte
 		// Return error
 		return nil, err
 	}
-	if len(secrets.Items) != 1 {
-		return nil, fmt.Errorf("found %d secrets with '%s'-label", len(secrets.Items), syncthingclient.StClientSyncTlsLabel)
+	if len(secretList.Items) != 1 {
+		return nil, fmt.Errorf("found %d secrets with '%s'-label", len(secretList.Items), syncthingclient.StClientSyncTlsLabel)
+	}
+	return &secretList.Items[0], nil
+}
+
+// Set command-parameter for container
+func setCommandParameter(paramName string, paramValue string, container *corev1.Container) bool {
+	// Convert string-array to map
+	cmdAsMap := make(map[string]string, len(container.Command)+1)
+	var sep, name, value string
+	for _, part := range container.Command {
+		sep = " "
+		if strings.Contains(part, "=") {
+			sep = "="
+		}
+		splitted := strings.SplitN(part, sep, 2)
+		name = splitted[0]
+		if len(splitted) == 2 {
+			value = splitted[1]
+		} else {
+			value = ""
+		}
+		cmdAsMap[name] = value
 	}
 
-	return &secrets.Items[0], nil
+	// return false if parameter is already set
+	old_value, exists := cmdAsMap[paramName]
+	if exists && old_value == paramValue {
+		return false
+	}
+
+	// Update parameter && regenerate command array
+	cmdAsMap[paramName] = paramValue
+	new_command := make([]string, len(cmdAsMap))
+	for name, val := range cmdAsMap {
+		if val != "" {
+			new_command = append(new_command, name+" "+val)
+		} else {
+			new_command = append(new_command, name)
+		}
+	}
+	container.Command = new_command
+	return true
 }
 
 // Mount the secret as a Volume in the deployment
-func generateTlsVolumeAndMount(syncthing_cr *syncthingv1.Instance, secret *corev1.Secret, deployment *appsv1.Deployment) *appsv1.Deployment {
+func generateTlsVolumeAndMount(instanceCr *syncthingv1.Instance, secret *corev1.Secret, deployment *appsv1.Deployment) *appsv1.Deployment {
 	tlsVolume := corev1.Volume{
-		Name: syncthing_cr.Spec.TlsConfigName,
+		Name: instanceCr.Spec.TlsConfigName,
 		VolumeSource: corev1.VolumeSource{
 			Secret: &corev1.SecretVolumeSource{
 				SecretName: secret.Name,
@@ -125,12 +165,12 @@ func generateTlsVolumeAndMount(syncthing_cr *syncthingv1.Instance, secret *corev
 	}
 	keyMount := corev1.VolumeMount{
 		Name:      tlsVolume.Name,
-		MountPath: syncthing_cr.Spec.ConfigPath + "key.pem",
+		MountPath: instanceCr.Spec.ConfigPath + "key.pem",
 		SubPath:   "tls.key",
 	}
 	certMount := corev1.VolumeMount{
 		Name:      tlsVolume.Name,
-		MountPath: syncthing_cr.Spec.ConfigPath + "cert.pem",
+		MountPath: instanceCr.Spec.ConfigPath + "cert.pem",
 		SubPath:   "tls.crt",
 	}
 
@@ -149,19 +189,19 @@ func generateTlsVolumeAndMount(syncthing_cr *syncthingv1.Instance, secret *corev
 }
 
 // MountConfigs for all persistent volumes
-func generateVolumeMountConfigs(syncthing_cr *syncthingv1.Instance, volumes []corev1.Volume) map[string]corev1.VolumeMount {
+func generateVolumeMountConfigs(instanceCr *syncthingv1.Instance, volumes []corev1.Volume) map[string]corev1.VolumeMount {
 	mounts := map[string]corev1.VolumeMount{}
 	for _, volume := range volumes {
 		templateMount := corev1.VolumeMount{
 			Name:      volume.Name,
-			MountPath: syncthing_cr.Spec.DataPath + volume.Name + "/",
+			MountPath: instanceCr.Spec.DataPath + volume.Name + "/",
 		}
 
 		if volume.Name == "config-root" {
-			templateMount.MountPath = syncthing_cr.Spec.ConfigPath
+			templateMount.MountPath = instanceCr.Spec.ConfigPath
 		}
 		if volume.Name == "data-root" {
-			templateMount.MountPath = syncthing_cr.Spec.DataPath
+			templateMount.MountPath = instanceCr.Spec.DataPath
 		}
 		mounts[volume.Name] = templateMount
 	}
@@ -170,35 +210,38 @@ func generateVolumeMountConfigs(syncthing_cr *syncthingv1.Instance, volumes []co
 }
 
 // TLS certificates for sync protocol
-func generateTlsSecret(syncthing_cr *syncthingv1.Instance) *corev1.Secret {
-	secretLabels := commonSyncthingLabels(syncthing_cr.Name)
-	secretLabels[syncthingclient.StClientConfigLabel] = "plain"
+func generateSyncSecret(instanceCr *syncthingv1.Instance) *corev1.Secret {
+	secretLabels := commonSyncthingLabels(instanceCr.Name)
 	secretLabels[syncthingclient.StClientSyncTlsLabel] = "pem"
 
 	secret := &corev1.Secret{
 		ObjectMeta: metav1.ObjectMeta{
-			Name:      syncthing_cr.Name + "-id",
-			Namespace: syncthing_cr.Namespace,
+			Name:      instanceCr.Name + "-id",
+			Namespace: instanceCr.Namespace,
 			Labels:    secretLabels,
 		},
 		Type: corev1.SecretTypeTLS,
 		Data: map[string][]byte{
-			// TODO: make this dependent on the actual client config
-			"url":     []byte(syncthing_cr.Spec.Clientconfig.ApiUrl),
-			"apikey":  []byte(syncthing_cr.Spec.Clientconfig.ApiKey),
-			"tls.key": []byte(syncthing_cr.Spec.TlsKey),
-			"tls.crt": []byte(syncthing_cr.Spec.TlsCrt),
+			"tls.key": []byte(instanceCr.Spec.TlsKey),
+			"tls.crt": []byte(instanceCr.Spec.TlsCrt),
 		},
+	}
+
+	// Combine Clientconfig with SyncSecret, if configured in CustomResource
+	if instanceCr.Spec.Clientconfig.ApiKey != "" {
+		secretLabels[syncthingclient.StClientConfigLabel] = "plain"
+		secret.Data["url"] = []byte(instanceCr.Spec.Clientconfig.ApiUrl)
+		secret.Data["apikey"] = []byte(instanceCr.Spec.Clientconfig.ApiKey)
 	}
 
 	return secret
 }
 
 // Base Deployment Object
-func generateDeployment(syncthing_cr *syncthingv1.Instance) *appsv1.Deployment {
-	labels := commonSyncthingLabels(syncthing_cr.Name)
-	image := syncthing_cr.Spec.ImageName
-	tag := syncthing_cr.Spec.Tag
+func generateDeployment(instanceCr *syncthingv1.Instance) *appsv1.Deployment {
+	labels := commonSyncthingLabels(instanceCr.Name)
+	image := instanceCr.Spec.ImageName
+	tag := instanceCr.Spec.Tag
 	var replicas int32 = 1
 	reqCpu, _ := resource.ParseQuantity("10m")
 	reqMem, _ := resource.ParseQuantity("50M")
@@ -207,8 +250,8 @@ func generateDeployment(syncthing_cr *syncthingv1.Instance) *appsv1.Deployment {
 
 	return &appsv1.Deployment{
 		ObjectMeta: metav1.ObjectMeta{
-			Name:      syncthing_cr.Name,
-			Namespace: syncthing_cr.Namespace,
+			Name:      instanceCr.Name,
+			Namespace: instanceCr.Namespace,
 		},
 		Spec: appsv1.DeploymentSpec{
 			Selector: &metav1.LabelSelector{
@@ -226,13 +269,12 @@ func generateDeployment(syncthing_cr *syncthingv1.Instance) *appsv1.Deployment {
 					Containers: []corev1.Container{{
 						Image:           image + ":" + tag,
 						ImagePullPolicy: corev1.PullIfNotPresent,
-						Name:            syncthing_cr.Spec.ContainerName,
+						Name:            instanceCr.Spec.ContainerName,
 						Command: []string{
 							"syncthing",
 							"serve",
-							"--config=" + syncthing_cr.Spec.ConfigPath,
-							"--data=" + syncthing_cr.Spec.DataPath,
-							"--gui-apikey=" + syncthing_cr.Spec.Clientconfig.ApiKey,
+							"--config" + " " + instanceCr.Spec.ConfigPath,
+							"--data" + " " + instanceCr.Spec.DataPath,
 						},
 						Ports: []corev1.ContainerPort{
 							{
@@ -256,10 +298,9 @@ func generateDeployment(syncthing_cr *syncthingv1.Instance) *appsv1.Deployment {
 								HTTPGet: &corev1.HTTPGetAction{
 									Path: "/rest/system/ping",
 									Port: intstr.FromString("http"),
-									HTTPHeaders: []corev1.HTTPHeader{{
-										Name:  "X-API-Key",
-										Value: syncthing_cr.Spec.Clientconfig.ApiKey,
-									}},
+									HTTPHeaders: []corev1.HTTPHeader{
+										{Name: "X-API-Key", Value: instanceCr.Spec.Clientconfig.ApiKey},
+									},
 								},
 							},
 						},
@@ -282,15 +323,15 @@ func generateDeployment(syncthing_cr *syncthingv1.Instance) *appsv1.Deployment {
 }
 
 // Generate a ClusterIP Service, but leave exposing syncthing to the user
-func generateClusterService(syncthing_cr *syncthingv1.Instance) *corev1.Service {
+func generateClusterService(instanceCr *syncthingv1.Instance) *corev1.Service {
 	return &corev1.Service{
 		ObjectMeta: metav1.ObjectMeta{
-			Name:      syncthing_cr.Name + "-web",
-			Namespace: syncthing_cr.Namespace,
+			Name:      instanceCr.Name + "-web",
+			Namespace: instanceCr.Namespace,
 		},
 		Spec: corev1.ServiceSpec{
 			Type:     corev1.ServiceTypeClusterIP,
-			Selector: commonSyncthingLabels(syncthing_cr.Name),
+			Selector: commonSyncthingLabels(instanceCr.Name),
 			Ports: []corev1.ServicePort{{
 				Name:       "http",
 				Port:       8384,
@@ -299,7 +340,7 @@ func generateClusterService(syncthing_cr *syncthingv1.Instance) *corev1.Service 
 			}, {
 				Name:       "sync",
 				TargetPort: intstr.FromString("sync"),
-				Port:       int32(syncthing_cr.Spec.SyncPort),
+				Port:       int32(instanceCr.Spec.SyncPort),
 				Protocol:   corev1.ProtocolUDP,
 			}},
 		},
@@ -307,15 +348,15 @@ func generateClusterService(syncthing_cr *syncthingv1.Instance) *corev1.Service 
 }
 
 // Optional: Generate a NodePort to expose syncthing to the outside world
-func generateNodeportService(syncthing_cr *syncthingv1.Instance) *corev1.Service {
+func generateNodeportService(instanceCr *syncthingv1.Instance) *corev1.Service {
 	return &corev1.Service{
 		ObjectMeta: metav1.ObjectMeta{
-			Name:      syncthing_cr.Name + "-nodeport",
-			Namespace: syncthing_cr.Namespace,
+			Name:      instanceCr.Name + "-nodeport",
+			Namespace: instanceCr.Namespace,
 		},
 		Spec: corev1.ServiceSpec{
 			Type:     corev1.ServiceTypeNodePort,
-			Selector: commonSyncthingLabels(syncthing_cr.Name),
+			Selector: commonSyncthingLabels(instanceCr.Name),
 			Ports: []corev1.ServicePort{{
 				Name:       "http",
 				Port:       8384,
@@ -325,20 +366,20 @@ func generateNodeportService(syncthing_cr *syncthingv1.Instance) *corev1.Service
 			}, {
 				Name:       "sync",
 				TargetPort: intstr.FromString("sync"),
-				Port:       int32(syncthing_cr.Spec.SyncPort),
-				NodePort:   int32(syncthing_cr.Spec.SyncPort),
+				Port:       int32(instanceCr.Spec.SyncPort),
+				NodePort:   int32(instanceCr.Spec.SyncPort),
 				Protocol:   corev1.ProtocolUDP,
 			}, {
 				Name:       "sync-tcp",
 				TargetPort: intstr.FromString("sync"),
-				Port:       int32(syncthing_cr.Spec.SyncPort),
-				NodePort:   int32(syncthing_cr.Spec.SyncPort),
+				Port:       int32(instanceCr.Spec.SyncPort),
+				NodePort:   int32(instanceCr.Spec.SyncPort),
 				Protocol:   corev1.ProtocolTCP,
 			}, {
 				Name:       "discovery",
 				TargetPort: intstr.FromString("discovery"),
-				Port:       int32(syncthing_cr.Spec.DiscoveryPort),
-				NodePort:   int32(syncthing_cr.Spec.DiscoveryPort),
+				Port:       int32(instanceCr.Spec.DiscoveryPort),
+				NodePort:   int32(instanceCr.Spec.DiscoveryPort),
 				Protocol:   corev1.ProtocolUDP,
 			},
 			},

@@ -129,32 +129,25 @@ func (r *InstanceReconciler) ReconcileKubernetes(instanceCr *syncthingv1.Instanc
 	// === Create necessary API opbjects ===
 	// =====================================
 
-	// === Look for TLS Secret: in the CustomResource ===
+	// === Look for Sync Secret: in the CustomResource ===
 	// (the one for the sync, not HTTPS)
-	var foundSecret *corev1.Secret
+	var syncSecret, configSecret *corev1.Secret
 	if instanceCr.Spec.TlsKey != "" && instanceCr.Spec.TlsCrt != "" {
 		r.logger.V(1).Info("Using TLS certificate from CustomResource")
-		secret := generateTlsSecret(instanceCr)
+		secret := generateSyncSecret(instanceCr)
 		ctrl.SetControllerReference(instanceCr, secret, r.Scheme)
 		createReturn, obj, result, err := GetOrCreateObject(r, instanceCr.GetNamespace(), secret)
 		if createReturn.IsOneOf(Created, GetError, CreateError) {
 			return result, err
 		}
-		foundSecret = obj.(*corev1.Secret) // type-cast
-	}
-	// === Look for TLS Secret: labeled Secret ===
-	if foundSecret == nil {
-		r.logger.V(1).Info("Looking for TLS certificate in Namespace " + r.req.Namespace)
-		foundSecret, err := findTlsSecretInNamespace(r.req.Namespace, r.Client, r.ctx)
-		if err != nil {
-			return ctrl.Result{}, err
-		}
-		if foundSecret == nil {
-			r.logger.V(1).Info(fmt.Sprintf("No secret with label '%s' found in namespace '%s'. Retrying...", syncthingclient.StClientSyncTlsLabel, r.req.Namespace))
-			return ctrl.Result{Requeue: true, RequeueAfter: 1 * time.Minute}, nil
+		syncSecret = obj.(*corev1.Secret) // type-cast
+
+		// Set configSecret as well (if label is set)
+		_, exists := syncSecret.ObjectMeta.Labels[syncthingclient.StClientConfigLabel]
+		if exists {
+			configSecret = syncSecret
 		}
 	}
-	r.logger.Info(fmt.Sprintf("Using Secret '%s' for TLS certificate.", foundSecret.Name))
 
 	// === Ensure Deployment exists ===
 	deployment := generateDeployment(instanceCr)
@@ -172,6 +165,40 @@ func (r *InstanceReconciler) ReconcileKubernetes(instanceCr *syncthingv1.Instanc
 	if createReturn.IsOneOf(Created, GetError, CreateError) {
 		return result, err
 	}
+
+	// ======================================
+	// === Find user defind configuration ===
+	// ======================================
+
+	// === Look for Sync Secret ===
+	if syncSecret == nil {
+		r.logger.V(1).Info("Looking for Sync certificate in Namespace " + r.req.Namespace)
+		tmpSecret, err := FindSecretByLabel(r.req.Namespace, syncthingclient.StClientSyncTlsLabel, r.Client, r.ctx)
+		syncSecret = tmpSecret
+		if err != nil {
+			return ctrl.Result{}, err
+		}
+		if syncSecret == nil {
+			r.logger.V(1).Info(fmt.Sprintf("No secret with label '%s' found in namespace '%s'. Retrying...", syncthingclient.StClientSyncTlsLabel, r.req.Namespace))
+			return ctrl.Result{Requeue: true, RequeueAfter: 1 * time.Minute}, nil
+		}
+	}
+	r.logger.Info(fmt.Sprintf("Using Secret '%s' as Sync certificate", syncSecret.Name))
+
+	// === Look for Config Secret ===
+	if configSecret == nil {
+		r.logger.V(1).Info("Looking for Client Config in Namespace " + r.req.Namespace)
+		tmpSecret, err := FindSecretByLabel(r.req.Namespace, syncthingclient.StClientConfigLabel, r.Client, r.ctx)
+		configSecret = tmpSecret
+		if err != nil {
+			return ctrl.Result{}, err
+		}
+		if configSecret == nil {
+			r.logger.V(1).Info(fmt.Sprintf("No secret with label '%s' found in namespace '%s'. Retrying...", syncthingclient.StClientConfigLabel, r.req.Namespace))
+			return ctrl.Result{Requeue: true, RequeueAfter: 1 * time.Minute}, nil
+		}
+	}
+	r.logger.Info(fmt.Sprintf("Using Secret '%s' as config source", configSecret.Name))
 
 	// ================================================
 	// === Apply configuration to Deployment object ===
@@ -196,7 +223,7 @@ func (r *InstanceReconciler) ReconcileKubernetes(instanceCr *syncthingv1.Instanc
 	if getVolumeIndexByName(foundDeployment.Spec.Template.Spec.Volumes, instanceCr.Spec.TlsConfigName) == -1 ||
 		getVolumeMountIndexByName(foundDeployment.Spec.Template.Spec.Containers[container_index].VolumeMounts, instanceCr.Spec.TlsConfigName) == -1 {
 		r.logger.Info("Adding TLS configuration to deployment...")
-		foundDeployment = generateTlsVolumeAndMount(instanceCr, foundSecret, foundDeployment)
+		foundDeployment = generateTlsVolumeAndMount(instanceCr, syncSecret, foundDeployment)
 		return UpdateObject(r, foundDeployment)
 	}
 
@@ -219,6 +246,40 @@ func (r *InstanceReconciler) ReconcileKubernetes(instanceCr *syncthingv1.Instanc
 		return UpdateObject(r, foundDeployment)
 	}
 
+	// === Set API Key in command-line ===
+	var apikey string
+	key_bytes, existed := configSecret.Data["apikey"]
+	// CLI
+	if instanceCr.Spec.Clientconfig.ApiKey != "" {
+		apikey = instanceCr.Spec.Clientconfig.ApiKey
+	} else if existed {
+		apikey = string(key_bytes)
+	}
+	updated := setCommandParameter("--gui-apikey", apikey, &foundDeployment.Spec.Template.Spec.Containers[container_index])
+	// Update Deployment after ensuring the livenessprobe is set correctly
+
+	// === Set Livenes Probe ===
+	livenessprobe := foundDeployment.Spec.Template.Spec.Containers[container_index].LivenessProbe
+	livenessprobe_header_index := -1
+	livenessprobe_updated := false
+	for index, http_header := range livenessprobe.Handler.HTTPGet.HTTPHeaders {
+		if http_header.Name == "X-API-Key" {
+			livenessprobe_header_index = index
+		}
+	}
+	if livenessprobe_header_index == -1 {
+		livenessprobe.Handler.HTTPGet.HTTPHeaders = append(livenessprobe.Handler.HTTPGet.HTTPHeaders, corev1.HTTPHeader{Name: "X-API-Key", Value: apikey})
+		livenessprobe_updated = true
+	} else if livenessprobe.Handler.HTTPGet.HTTPHeaders[livenessprobe_header_index].Value != apikey {
+		livenessprobe.Handler.HTTPGet.HTTPHeaders[livenessprobe_header_index].Value = apikey
+		livenessprobe_updated = true
+	}
+	if updated || livenessprobe_updated {
+		r.logger.Info("Configure API Key and Liveness Probe...")
+		return UpdateObject(r, foundDeployment)
+	}
+
+	// === A bunch of stuff not yet properly implemented ===
 	var runAsUser int64 = 568
 	if instanceCr.Spec.TrueNas && (foundDeployment.Spec.Template.Spec.SecurityContext.RunAsUser != &runAsUser) {
 		yes, no, policy := true, false, corev1.FSGroupChangeOnRootMismatch

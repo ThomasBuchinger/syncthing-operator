@@ -10,6 +10,7 @@ import (
 )
 
 type CreateReturnValues int
+type FindReturnValues int
 
 const (
 	CreateError CreateReturnValues = iota
@@ -17,9 +18,23 @@ const (
 	Created
 	Existed
 )
+const (
+	NotFound FindReturnValues = iota
+	FindError
+	ResultInvalid
+	Found
+)
 
 // Helper method to check if the CreateReturnValue is one of the given values
 func (n CreateReturnValues) IsOneOf(list ...CreateReturnValues) bool {
+	for _, value := range list {
+		if n == value {
+			return true
+		}
+	}
+	return false
+}
+func (n FindReturnValues) IsOneOf(list ...FindReturnValues) bool {
 	for _, value := range list {
 		if n == value {
 			return true
