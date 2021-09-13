@@ -131,7 +131,7 @@ func (r *InstanceReconciler) ReconcileKubernetes(instanceCr *syncthingv1.Instanc
 
 	// === Look for Sync Secret: in the CustomResource ===
 	// (the one for the sync, not HTTPS)
-	var syncSecret, configSecret *corev1.Secret
+	var syncSecret *corev1.Secret
 	if instanceCr.Spec.TlsKey != "" && instanceCr.Spec.TlsCrt != "" {
 		r.logger.V(1).Info("Using TLS certificate from CustomResource")
 		secret := generateSyncSecret(instanceCr)
@@ -145,7 +145,7 @@ func (r *InstanceReconciler) ReconcileKubernetes(instanceCr *syncthingv1.Instanc
 		// Set configSecret as well (if label is set)
 		_, exists := syncSecret.ObjectMeta.Labels[syncthingclient.StClientConfigLabel]
 		if exists {
-			configSecret = syncSecret
+			instanceCr.Spec.Clientconfig.ConfigSecret = syncSecret
 		}
 	}
 
@@ -173,7 +173,7 @@ func (r *InstanceReconciler) ReconcileKubernetes(instanceCr *syncthingv1.Instanc
 	// === Look for Sync Secret ===
 	if syncSecret == nil {
 		r.logger.V(1).Info("Looking for Sync certificate in Namespace " + r.req.Namespace)
-		tmpSecret, err := FindSecretByLabel(r.req.Namespace, syncthingclient.StClientSyncTlsLabel, r.Client, r.ctx)
+		tmpSecret, err := syncthingclient.FindSecretByLabel(r.req.Namespace, syncthingclient.StClientSyncTlsLabel, r.Client, r.ctx)
 		syncSecret = tmpSecret
 		if err != nil {
 			return ctrl.Result{}, err
@@ -184,21 +184,6 @@ func (r *InstanceReconciler) ReconcileKubernetes(instanceCr *syncthingv1.Instanc
 		}
 	}
 	r.logger.Info(fmt.Sprintf("Using Secret '%s' as Sync certificate", syncSecret.Name))
-
-	// === Look for Config Secret ===
-	if configSecret == nil {
-		r.logger.V(1).Info("Looking for Client Config in Namespace " + r.req.Namespace)
-		tmpSecret, err := FindSecretByLabel(r.req.Namespace, syncthingclient.StClientConfigLabel, r.Client, r.ctx)
-		configSecret = tmpSecret
-		if err != nil {
-			return ctrl.Result{}, err
-		}
-		if configSecret == nil {
-			r.logger.V(1).Info(fmt.Sprintf("No secret with label '%s' found in namespace '%s'. Retrying...", syncthingclient.StClientConfigLabel, r.req.Namespace))
-			return ctrl.Result{Requeue: true, RequeueAfter: 1 * time.Minute}, nil
-		}
-	}
-	r.logger.Info(fmt.Sprintf("Using Secret '%s' as config source", configSecret.Name))
 
 	// ================================================
 	// === Apply configuration to Deployment object ===
@@ -247,15 +232,11 @@ func (r *InstanceReconciler) ReconcileKubernetes(instanceCr *syncthingv1.Instanc
 	}
 
 	// === Set API Key in command-line ===
-	var apikey string
-	key_bytes, existed := configSecret.Data["apikey"]
-	// CLI
-	if instanceCr.Spec.Clientconfig.ApiKey != "" {
-		apikey = instanceCr.Spec.Clientconfig.ApiKey
-	} else if existed {
-		apikey = string(key_bytes)
+	stclient, err := syncthingclient.FromCr(instanceCr.Spec.Clientconfig, r.req.Namespace, r.Client, r.ctx)
+	if err != nil {
+		return ctrl.Result{}, err
 	}
-	updated := setCommandParameter("--gui-apikey", apikey, &foundDeployment.Spec.Template.Spec.Containers[container_index])
+	updated := setCommandParameter("--gui-apikey", stclient.ApiKey, &foundDeployment.Spec.Template.Spec.Containers[container_index])
 	// Update Deployment after ensuring the livenessprobe is set correctly
 
 	// === Set Livenes Probe ===
@@ -268,10 +249,10 @@ func (r *InstanceReconciler) ReconcileKubernetes(instanceCr *syncthingv1.Instanc
 		}
 	}
 	if livenessprobe_header_index == -1 {
-		livenessprobe.Handler.HTTPGet.HTTPHeaders = append(livenessprobe.Handler.HTTPGet.HTTPHeaders, corev1.HTTPHeader{Name: "X-API-Key", Value: apikey})
+		livenessprobe.Handler.HTTPGet.HTTPHeaders = append(livenessprobe.Handler.HTTPGet.HTTPHeaders, corev1.HTTPHeader{Name: "X-API-Key", Value: stclient.ApiKey})
 		livenessprobe_updated = true
-	} else if livenessprobe.Handler.HTTPGet.HTTPHeaders[livenessprobe_header_index].Value != apikey {
-		livenessprobe.Handler.HTTPGet.HTTPHeaders[livenessprobe_header_index].Value = apikey
+	} else if livenessprobe.Handler.HTTPGet.HTTPHeaders[livenessprobe_header_index].Value != stclient.ApiKey {
+		livenessprobe.Handler.HTTPGet.HTTPHeaders[livenessprobe_header_index].Value = stclient.ApiKey
 		livenessprobe_updated = true
 	}
 	if updated || livenessprobe_updated {

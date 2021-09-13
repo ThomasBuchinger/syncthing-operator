@@ -1,17 +1,13 @@
 package controllers
 
 import (
-	"context"
-	"fmt"
 	"strings"
 
 	syncthingv1 "github.com/thomasbuchinger/syncthing-operator/api/v1"
 	syncthingclient "github.com/thomasbuchinger/syncthing-operator/pkg/syncthing-client"
-	"sigs.k8s.io/controller-runtime/pkg/client"
 
 	appsv1 "k8s.io/api/apps/v1"
 	corev1 "k8s.io/api/core/v1"
-	"k8s.io/apimachinery/pkg/api/errors"
 	"k8s.io/apimachinery/pkg/api/resource"
 	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
 	"k8s.io/apimachinery/pkg/util/intstr"
@@ -94,23 +90,6 @@ func getVolumeMountIndexByName(list []corev1.VolumeMount, name string) int {
 		}
 	}
 	return -1
-}
-
-func FindSecretByLabel(ns string, label string, c interface{ client.Client }, ctx context.Context) (*corev1.Secret, error) {
-	secretList := &corev1.SecretList{}
-	err := c.List(ctx, secretList, client.InNamespace(ns), client.HasLabels{label})
-	if err != nil && errors.IsNotFound(err) {
-		// Finding nothing isn't a problem
-		return nil, nil
-	}
-	if err != nil {
-		// Return error
-		return nil, err
-	}
-	if len(secretList.Items) != 1 {
-		return nil, fmt.Errorf("found %d secrets with '%s'-label", len(secretList.Items), syncthingclient.StClientSyncTlsLabel)
-	}
-	return &secretList.Items[0], nil
 }
 
 // Set command-parameter for container
@@ -230,8 +209,8 @@ func generateSyncSecret(instanceCr *syncthingv1.Instance) *corev1.Secret {
 	// Combine Clientconfig with SyncSecret, if configured in CustomResource
 	if instanceCr.Spec.Clientconfig.ApiKey != "" {
 		secretLabels[syncthingclient.StClientConfigLabel] = "plain"
-		secret.Data["url"] = []byte(instanceCr.Spec.Clientconfig.ApiUrl)
-		secret.Data["apikey"] = []byte(instanceCr.Spec.Clientconfig.ApiKey)
+		secret.Data[syncthingclient.StClientKeyUrl] = []byte(instanceCr.Spec.Clientconfig.ApiUrl)
+		secret.Data[syncthingclient.StClientKeyApiKey] = []byte(instanceCr.Spec.Clientconfig.ApiKey)
 	}
 
 	return secret

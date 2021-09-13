@@ -4484,7 +4484,7 @@ spec:
                 description: TrueNAS Settings not propperly integrated
                 type: boolean
               url:
-                default: http://syncthing.svc.cluster.local:8384
+                default: ""
                 type: string
             type: object
           status:

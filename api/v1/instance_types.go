@@ -17,7 +17,6 @@ limitations under the License.
 package v1
 
 import (
-	syncthingclient "github.com/thomasbuchinger/syncthing-operator/pkg/syncthing-client"
 	corev1 "k8s.io/api/core/v1"
 	"k8s.io/apimachinery/pkg/api/resource"
 	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
@@ -40,7 +39,7 @@ type InstanceSpec struct {
 
 	// Embed Syncthing API info into InstanceSpec.
 	// This allows the operator to control an external Syncthing instance
-	Clientconfig syncthingclient.StClientConfig `json:",inline"`
+	Clientconfig StClientConfig `json:",inline"`
 
 	// Hardcode Syncthing Certificate and private key
 	// This certificate is used to authenticate syncthing to other syncthing-instances. Use HttpsCrt/HttpsKey to configure HTTPS for the webinterface

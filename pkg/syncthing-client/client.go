@@ -14,6 +14,8 @@ import (
 	"k8s.io/apimachinery/pkg/api/errors"
 	"sigs.k8s.io/controller-runtime/pkg/client"
 	"sigs.k8s.io/controller-runtime/pkg/log"
+
+	syncthingv1 "github.com/thomasbuchinger/syncthing-operator/api/v1"
 )
 
 const StClientConfigLabel string = "syncthing.buc.sh/config"
@@ -21,14 +23,6 @@ const StClientSyncTlsLabel = "syncthing.buc.sh/sync-cert"
 const StClientHttpsLabel = "syncthing.buc.sh/https-cert"
 const StClientKeyUrl = "url"
 const StClientKeyApiKey = "apikey"
-
-// Optional in CustomResource definition of synyncthing instance. Shared by all CRDs
-type StClientConfig struct {
-	//+kubebuilder:default:="http://syncthing.svc.cluster.local:8384"
-	ApiUrl string `json:"url,omitempty"`
-	//+kubebuilder:default:=""
-	ApiKey string `json:"apikey,omitempty"`
-}
 
 // Syncthing Client Object
 type StClient struct {
@@ -39,10 +33,10 @@ type StClient struct {
 }
 
 // Create a Client from either the given CustomResource or search the given namespace
-func FromCr(cr StClientConfig, ns string, client interface{ client.Client }, ctx context.Context) (*StClient, error) {
-	url_string, key := "http://syncthing.svc.cluster.local:8384", ""
+func FromCr(cr syncthingv1.StClientConfig, ns string, client interface{ client.Client }, ctx context.Context) (*StClient, error) {
 	logger := log.FromContext(ctx)
 	config_valid := struct{ Url, Key bool }{Url: false, Key: false}
+	var url_string, key string
 
 	// CustomResource Config has highest precedence
 	if cr.ApiUrl != "" {
@@ -54,20 +48,37 @@ func FromCr(cr StClientConfig, ns string, client interface{ client.Client }, ctx
 		config_valid.Key = true
 	}
 
+	// Check if configSecret is set explicitly
+	if cr.ConfigSecret != nil {
+		logger.V(1).Info("Using configuration in Secret: " + cr.ConfigSecret.Name)
+		url_bytes, ok := cr.ConfigSecret.Data[StClientKeyUrl]
+		if ok && !config_valid.Key {
+			url_string = string(url_bytes)
+			config_valid.Url = true
+		}
+		key_bytes, ok := cr.ConfigSecret.Data[StClientKeyApiKey]
+		if ok && !config_valid.Key {
+			key = string(key_bytes)
+			config_valid.Key = true
+		}
+	}
+
 	// Next look for a Config in the Namespace
 	if !(config_valid.Url && config_valid.Key) {
 		logger.V(1).Info("Searching for connection secret in namespace: " + ns)
-		ns_url, ns_key, err := searchNamespace(ns, client, ctx)
+		secret, err := FindSecretByLabel(ns, StClientConfigLabel, client, ctx)
 		if err != nil {
+			// Log error. This is not (yet) fatal
 			logger.V(1).Info("Error quering Secret: %s", err.Error())
 		} else {
-			// If both values are empty, either no secret was found or the secret did not have matching keys
-			if ns_url != "" && !config_valid.Url {
-				url_string = ns_url
+			url_bytes, ok := secret.Data[StClientKeyUrl]
+			if ok && !config_valid.Key {
+				url_string = string(url_bytes)
 				config_valid.Url = true
 			}
-			if ns_key != "" && !config_valid.Key {
-				key = ns_key
+			key_bytes, ok := secret.Data[StClientKeyApiKey]
+			if ok && !config_valid.Key {
+				key = string(key_bytes)
 				config_valid.Key = true
 			}
 		}
@@ -99,23 +110,21 @@ func FromCr(cr StClientConfig, ns string, client interface{ client.Client }, ctx
 	return c, nil
 }
 
-// search namespace for a secret containing an API endpoint
-func searchNamespace(ns string, c interface{ client.Client }, ctx context.Context) (string, string, error) {
-	secrets := &corev1.SecretList{}
-	err := c.List(ctx, secrets, client.InNamespace(ns), client.HasLabels{StClientConfigLabel})
+func FindSecretByLabel(ns string, label string, c interface{ client.Client }, ctx context.Context) (*corev1.Secret, error) {
+	secretList := &corev1.SecretList{}
+	err := c.List(ctx, secretList, client.InNamespace(ns), client.HasLabels{label})
 	if err != nil && errors.IsNotFound(err) {
-		return "", "", nil
+		// Finding nothing isn't a problem
+		return nil, nil
 	}
 	if err != nil {
-		return "", "", fmt.Errorf("error quering Secret: %s", err.Error())
+		// Return error
+		return nil, err
 	}
-	if len(secrets.Items) != 1 {
-		return "", "", fmt.Errorf("found %d secrets with '%s'-label", len(secrets.Items), StClientConfigLabel)
+	if len(secretList.Items) != 1 {
+		return nil, fmt.Errorf("found %d secrets with '%s'-label", len(secretList.Items), StClientSyncTlsLabel)
 	}
-	apiurl := secrets.Items[0].StringData["url"]
-	apikey := secrets.Items[0].StringData["apikey"]
-
-	return apiurl, apikey, nil
+	return &secretList.Items[0], nil
 }
 
 // helper method for http requests

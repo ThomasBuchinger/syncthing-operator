@@ -57,7 +57,7 @@ spec:
                   password, so the receiver cannot read it
                 type: string
               url:
-                default: http://syncthing.svc.cluster.local:8384
+                default: ""
                 type: string
             required:
             - id

@@ -17,7 +17,6 @@ limitations under the License.
 package v1
 
 import (
-	syncthingclient "github.com/thomasbuchinger/syncthing-operator/pkg/syncthing-client"
 	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
 )
 
@@ -25,7 +24,7 @@ import (
 type DeviceSpec struct {
 	// Embed Syncthing API info into DeviceSpec.
 	// This allows the operator to control an external Syncthing instance
-	Clientconfig syncthingclient.StClientConfig `json:",inline"`
+	Clientconfig StClientConfig `json:",inline"`
 
 	// Syncthing DeviceID
 	//TODO: this regex does not work: +kubebuilder:validation:Pattern=`[A-Z][7]([A-Z\-]{7}){7}`

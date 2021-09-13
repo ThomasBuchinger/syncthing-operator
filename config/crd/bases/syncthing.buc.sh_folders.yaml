@@ -97,7 +97,7 @@ spec:
                 - sendreceive
                 type: string
               url:
-                default: http://syncthing.svc.cluster.local:8384
+                default: ""
                 type: string
               use_name_as_id:
                 default: false
