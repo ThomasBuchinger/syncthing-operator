@@ -116,7 +116,7 @@ func (r *FolderReconciler) Reconcile(ctx context.Context, req ctrl.Request) (ctr
 		changed = true
 	}
 
-	if folderCr.Spec.UseNameAsId {
+	if folderCr.Spec.UseNameAsId && folder.Id != folderCr.Name {
 		logger.Info("Setting folder ID to: " + folderCr.Name)
 		folder.Id = folderCr.Name
 		changed = true

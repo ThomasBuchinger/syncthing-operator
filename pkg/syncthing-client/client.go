@@ -134,6 +134,7 @@ func FindSecretByLabel(ns string, label string, c interface{ client.Client }, ct
 		return nil, err
 	}
 	if len(secretList.Items) != 1 {
+		// TODO: odd number of arguments passed as key-value pairs for logging
 		return nil, fmt.Errorf("found %d secrets with '%s'-label", len(secretList.Items), label)
 	}
 	return &secretList.Items[0], nil

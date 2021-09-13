@@ -38,7 +38,7 @@ type FolderElement struct {
 	Id, Label, FilesystemType, Path, Type, Order, MarkerName string
 	Devices                                                  []DeviceReference
 	IgnorePerms, IgnoreDelete, Paused                        bool
-	RescanInterval                                           int
+	RescanIntervalS                                          int
 }
 type DeviceReference struct {
 	DeviceId, IntroducedBy, EncryptionPassword string

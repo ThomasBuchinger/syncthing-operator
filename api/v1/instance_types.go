@@ -43,7 +43,7 @@ type InstanceSpec struct {
 
 	// Hardcode Syncthing Certificate and private key
 	// This certificate is used to authenticate syncthing to other syncthing-instances. Use HttpsCrt/HttpsKey to configure HTTPS for the webinterface
-	// If you don't want the operator to manage the tls-secret, add a Kubernetes Secret with label "api.syncthing.buc.sh", "cert.syncthing.buc.sh", "key.syncthing.buc.sh" respectively to manage those secrets yourself
+	// If you don't want the operator to manage the sync-secret, add a Kubernetes Secret with label "syncthing.buc.sh/sync-cert" to manage those secrets yourself
 	// If no Secret is found and nothing is specified, the operator will generate one for you.
 	//+kubebuilder:validation:Pattern=`(-----BEGIN CERTIFICATE-----(\n|\r|\r\n)([0-9a-zA-Z\+\/=]{64}(\n|\r|\r\n))*([0-9a-zA-Z\+\/=]{1,63}(\n|\r|\r\n))?-----END CERTIFICATE-----)`
 	TlsCrt string `json:"tls_crt,omitempty"`

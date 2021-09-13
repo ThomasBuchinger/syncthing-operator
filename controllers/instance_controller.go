@@ -262,7 +262,7 @@ func (r *InstanceReconciler) ReconcileKubernetes(instanceCr *syncthingv1.Instanc
 
 	// === A bunch of stuff not yet properly implemented ===
 	var runAsUser int64 = 568
-	if instanceCr.Spec.TrueNas && (*foundDeployment.Spec.Template.Spec.SecurityContext.RunAsUser != runAsUser) {
+	if instanceCr.Spec.TrueNas && (foundDeployment.Spec.Template.Spec.SecurityContext.RunAsUser == nil || *foundDeployment.Spec.Template.Spec.SecurityContext.RunAsUser != runAsUser) {
 		yes, no, policy := true, false, corev1.FSGroupChangeOnRootMismatch
 		r.logger.Info(fmt.Sprintf("Set Security Context to: uid=%d FSGroupChangePolicy=%s, readonlyFS=%v", runAsUser, policy, no))
 		foundDeployment.Spec.Template.Spec.SecurityContext = &corev1.PodSecurityContext{
