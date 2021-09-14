@@ -116,6 +116,7 @@ func (r *FolderReconciler) Reconcile(ctx context.Context, req ctrl.Request) (ctr
 		changed = true
 	}
 
+	// === Set FolderID (if UseNameAsId) ===
 	if folderCr.Spec.UseNameAsId && folder.Id != folderCr.Name {
 		logger.Info("Setting folder ID to: " + folderCr.Name)
 		folder.Id = folderCr.Name
@@ -151,9 +152,9 @@ func (r *FolderReconciler) Reconcile(ctx context.Context, req ctrl.Request) (ctr
 	}
 
 	// === Check Rescan Interval ===
-	if folder.RescanInterval != folderCr.Spec.RescanInterval {
+	if folder.RescanIntervalS != folderCr.Spec.RescanInterval {
 		logger.Info("Setting RescanInterval: " + fmt.Sprint(folderCr.Spec.RescanInterval))
-		folder.RescanInterval = folderCr.Spec.RescanInterval
+		folder.RescanIntervalS = folderCr.Spec.RescanInterval
 		changed = true
 	}
 
@@ -166,24 +167,78 @@ func (r *FolderReconciler) Reconcile(ctx context.Context, req ctrl.Request) (ctr
 
 	// === Update Folder Configuration ===
 	if !changed {
-		logger.Info("Folder not changed: " + req.Name)
-		return ctrl.Result{Requeue: true, RequeueAfter: 10 * time.Minute}, nil
-	}
-
-	logger.Info("Updating Folder Configuration: " + folderCr.Name)
-	err = r.StClient.ReplaceFolder(folder)
-	if err != nil {
-		logger.Error(err, "Error configuring folder")
-		return ctrl.Result{Requeue: true, RequeueAfter: 10 * time.Second}, nil
+		logger.V(1).Info("Folder not changed: " + req.Name)
 	} else {
-		logger.Info("Folder successfully configured: " + req.Name)
+		logger.Info("Updating Folder Configuration: " + folderCr.Name)
+		err = r.StClient.ReplaceFolder(folder)
+		if err != nil {
+			logger.Error(err, "Error configuring folder")
+			return ctrl.Result{Requeue: true, RequeueAfter: 10 * time.Second}, nil
+		} else {
+			logger.Info("Folder successfully configured: " + req.Name)
+		}
+
 	}
 
 	// #########################
 	// # Update shared devices #
 	// #########################
 
-	return ctrl.Result{Requeue: true, RequeueAfter: 10 * time.Second}, nil
+	// === Add Devices by ID ===
+	changed, new, retry := false, false, false
+	for _, dev := range folderCr.Spec.SharedDeviceIds {
+		new = folder.AddDeviceById(dev)
+		if new {
+			logger.Info(fmt.Sprintf("Add Device %s to Folder %s", dev, req.Name))
+		}
+		changed = changed || new
+	}
+
+	// === Add Devices by name ===
+	for _, name := range folderCr.Spec.SharedDeviceNames {
+		dev := resolveDeviceNameToId(config.Devices, name)
+		if dev == "" {
+			logger.Info(fmt.Sprintf("Unknown Device '%s'. Retrying...", name))
+			retry = true
+		} else {
+			// Update Devices with ID
+			new = folder.AddDeviceById(dev)
+			if new {
+				logger.Info(fmt.Sprintf("Add Device %s with ID %s to Folder %s", name, dev, req.Name))
+			}
+			changed = changed || new
+		}
+	}
+
+	// === Update Folder Configuration ===
+	if !changed {
+		logger.V(1).Info("Shared devices not changed for Folder: " + req.Name)
+	} else {
+		logger.Info("Updating shared Device Configuration for Folder: " + folderCr.Name)
+		err = r.StClient.ReplaceFolder(folder)
+		if err != nil {
+			logger.Error(err, "Error configuring shared Devices for Folder")
+			return ctrl.Result{Requeue: true, RequeueAfter: 10 * time.Second}, nil
+		} else {
+			logger.Info("Shared Devices successfully configured for Folder: " + req.Name)
+		}
+
+	}
+
+	if retry {
+		return ctrl.Result{Requeue: true, RequeueAfter: 3 * time.Minute}, nil
+	} else {
+		return ctrl.Result{Requeue: true, RequeueAfter: 10 * time.Minute}, nil
+	}
+}
+
+func resolveDeviceNameToId(list []syncthingclient.DeviceElement, name string) string {
+	for _, dev := range list {
+		if dev.Name == name {
+			return dev.DeviceId
+		}
+	}
+	return ""
 }
 
 func generateStFolderConfig(folderCr syncthingv1.Folder) syncthingclient.FolderElement {
@@ -193,15 +248,15 @@ func generateStFolderConfig(folderCr syncthingv1.Folder) syncthingclient.FolderE
 		Label: folderCr.Spec.Label,
 		Path:  "/var/syncthing/" + folderCr.Name,
 
-		FilesystemType: "basic",
-		Type:           "sendreceive",
-		Order:          "random",
-		IgnorePerms:    false,
-		IgnoreDelete:   false,
-		Paused:         false,
-		RescanInterval: 3600,
-		Devices:        []syncthingclient.DeviceReference{},
-		MarkerName:     ".stfolder",
+		FilesystemType:  "basic",
+		Type:            "sendreceive",
+		Order:           "random",
+		IgnorePerms:     false,
+		IgnoreDelete:    false,
+		Paused:          false,
+		RescanIntervalS: 3600,
+		Devices:         []syncthingclient.DeviceReference{},
+		MarkerName:      ".stfolder",
 	}
 }
 

@@ -46,6 +46,20 @@ type DeviceReference struct {
 
 // === End Syncthing API response mappings ===
 
+func (folder *FolderElement) AddDeviceById(new_id string) bool {
+	for _, device_ref := range folder.Devices {
+		if device_ref.DeviceId == new_id {
+			return false
+		}
+	}
+	folder.Devices = append(folder.Devices, DeviceReference{DeviceId: new_id})
+	return true
+}
+
+// func (folder FolderElement) ResolveDeviceNameToID(new_id string) bool {
+// 	return true
+// }
+
 func (c StClient) GetDeviceIndexById(list []DeviceElement, id string) int {
 	for i, device := range list {
 		if device.DeviceId == id {
